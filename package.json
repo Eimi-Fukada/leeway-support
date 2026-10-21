@@ -1,0 +1,16 @@
+{
+  "name": "leeway-support",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "start": "turbo run start",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "2.11.10"
+  }
+}

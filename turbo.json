@@ -10,6 +10,10 @@
       "cache": false,
       "passThroughEnv": ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API_MODE"]
     },
+    "debug": {
+      "cache": false,
+      "passThroughEnv": ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API_MODE"]
+    },
     "test": {
       "cache": false
     },

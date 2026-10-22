@@ -24,6 +24,9 @@ pnpm dev
 # 执行一次固定问题的模型问答，结束后退出
 pnpm start
 
+# 单次流式调试，观察文本片段、节点更新和最终结果
+pnpm debug
+
 # 使用 fakeModel 验证 Agent 流程，不需要模型配置、不发真实模型请求
 pnpm test
 
@@ -56,6 +59,35 @@ OPENAI_API_MODE=responses
 
 真实入口每次运行会请求模型并产生相应费用，自动重试已关闭，单次模型请求超时为 60 秒。开发模式继续监听源码变化，每次重启都会再次发出请求。配置缺失或接口模式不合法会在请求前报错；调用失败以非零状态退出，不输出原始请求、密钥或供应商错误内容。
 
+## 执行过程观察
+
+根目录执行 `pnpm debug`，通过同一个 Agent 的 `stream` 执行一次真实请求；原有 `pnpm start` 继续使用 `invoke` 等待最终结果。需要模型服务支持流式响应，debug 任务不缓存。
+
+`src/debug.ts` 创建模型和 Agent；`src/debug-run.ts` 的 `observeAgent` 消费一次执行中的三类 streamMode：
+
+| 模式 | 用途 | 实际打印 |
+| --- | --- | --- |
+| messages | 观察模型输出片段 | 仅文本及所属节点，不打印 reasoning 或完整 metadata |
+| updates | 观察节点完成后的状态更新 | 仅节点名；它不是节点开始事件，也不是每次网络请求的计数 |
+| values | 获取各步骤的完整状态快照 | 内部读取最后一条 AI 消息，不打印完整 state |
+
+输出形态示意（片段数量由模型服务决定，可能一次返回整段）：
+
+```text
+[开始] Agent 流式执行
+[文本片段][model] "你好"
+[文本片段][model] "……"
+[节点更新] model
+[最终回答] 你好……
+[完成] 耗时 … ms
+```
+
+最终回答取自同一次流的最后状态，不再额外 invoke。只有流正常结束且存在有效回答才打印完成；即使已有文本，随后断流也输出失败并以非零状态退出，不把片段报告为成功结果。
+
+这是本地开发观察能力，输出文本属于模型原文，不是完整的生产日志脱敏方案。当前没有工具，因此只观察到模型路径；后续再逐步加入工具生命周期、调用预算和取消等能力。
+
+`stream` 的多模式接口适合直接观察 Graph 运行事件。[官方文档](https://docs.langchain.com/oss/javascript/langgraph/streaming)目前也推荐新应用评估 event streaming 的独立投影接口；此处为理解已有 streamMode 知识点，先保留一条迭代器中的明确分支，不同时接入两种流 API。
+
 ## 离线流程测试
 
 根目录运行 `pnpm test`，或者单独执行 `pnpm --filter @leeway-support/agent test`。测试使用 Node 内置测试运行器，无需新增测试框架依赖。
@@ -68,6 +100,8 @@ OPENAI_API_MODE=responses
 - 同一 Agent 处理不同输入时，未开启记忆的各次运行是否保持独立。
 - 模型抛错是否向调用方传播，而非返回伪造的成功回答。
 
+`tests/debug-run.test.ts` 另外验证流式观察：单次调用即可获得片段/节点/最终回答，不输出内部推理和元数据；失败不泄露原始错误；已产生部分文本后断流仍不报告成功。
+
 `respond(message)` 安排测试消息，`respond(messages => ...)` 在模型边界检查输入并生成测试返回值，`respond(error)` 注入错误。fakeModel 不理解问题，测试不证明真实模型会遵循提示词或正确选择工具；真实供应商能力另行验证。之后添加工具、中间件或结构化输出时，围绕实际流程扩展场景与断言。当前没有添加这些业务能力。
 
 ## 目录和调用链
@@ -77,7 +111,10 @@ apps/agent/
   src/index.ts           应用执行入口
   src/model.ts           定义 createModel，调用时加载配置并创建真实模型
   src/agent.ts           Agent 工厂，接收模型并定义提示词和工具列表
+  src/debug.ts           真实模型的流式调试入口
+  src/debug-run.ts       三类流事件的观察与完成/失败判定
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
+  tests/debug-run.test.ts 流式成功、失败、断流和输出范围测试
   package.json           Agent 自己的命令和依赖
   tsconfig.json          Agent 的 TypeScript 配置
 docs/                    技术方案和调研记录

@@ -6,9 +6,8 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "dev": "turbo run dev",
-    "start": "turbo run start",
-    "debug": "turbo run debug",
+    "dev": "turbo run dev --log-order=stream",
+    "start": "turbo run start --log-order=stream",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

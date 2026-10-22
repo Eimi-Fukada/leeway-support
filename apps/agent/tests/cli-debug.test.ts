@@ -6,7 +6,7 @@ import { ChatGenerationChunk } from "@langchain/core/outputs";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
 import { createSupportAgent } from "../src/agent.ts";
-import { observeAgent } from "../src/debug-run.ts";
+import { runSupportCli } from "../src/cli-run.ts";
 
 test("一次流式执行观察文本和节点，只在正常结束后报告最终回答", async () => {
   const model = fakeModel().respond(new AIMessage({
@@ -18,7 +18,7 @@ test("一次流式执行观察文本和节点，只在正常结束后报告最�
   }));
   const lines: string[] = [];
 
-  await observeAgent(createSupportAgent(model), "测试输入", (line) => lines.push(line));
+  await runSupportCli(createSupportAgent(model), "测试输入", (text) => lines.push(text.trimEnd()), true);
 
   assert.equal(model.calls.length, 1); // 不允许为获取最终结果重复请求模型。
   assert.ok(lines.some((line) => line.startsWith("[文本片段]")));
@@ -34,7 +34,7 @@ test("模型错误向上传播，观察输出不泄露原始错误且不报告�
   const lines: string[] = [];
 
   await assert.rejects(
-    observeAgent(createSupportAgent(model), "测试失败", (line) => lines.push(line)),
+    runSupportCli(createSupportAgent(model), "测试失败", (text) => lines.push(text.trimEnd()), true),
     (error: unknown) => error === failure,
   );
 
@@ -70,7 +70,7 @@ test("已有文本片段但随后断流时，不将半成品作为最终结果",
   const lines: string[] = [];
 
   await assert.rejects(
-    observeAgent(createSupportAgent(new InterruptedModel()), "测试断流", (line) => lines.push(line)),
+    runSupportCli(createSupportAgent(new InterruptedModel()), "测试断流", (text) => lines.push(text.trimEnd()), true),
     (error: unknown) => error === failure,
   );
 

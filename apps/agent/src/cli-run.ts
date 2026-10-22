@@ -7,6 +7,7 @@ export async function runSupportCli(
   question: string,
   write: (text: string) => void = (text) => { process.stdout.write(text); },
   debug = false,
+  threadId?: string,
 ) {
   write(debug ? "[开始] Agent 流式执行\n" : "[客服] ");
   try {
@@ -17,7 +18,7 @@ export async function runSupportCli(
         // 节点更新不是节点开始，也不是网络请求次数。
         write(`[节点更新] ${event.node}\n`);
       }
-    });
+    }, threadId);
     if (debug) write(`[最终回答] ${result.answer}\n`);
     else write("\n");
     write(`[完成] 耗时 ${result.elapsedMs} ms\n`);

@@ -10,12 +10,18 @@ export async function runSupportAgent(
   agent: ReturnType<typeof createSupportAgent>,
   question: string,
   onEvent: (event: SupportRunEvent) => void = () => {},
+  threadId?: string,
 ): Promise<{ answer: string; elapsedMs: number }> {
+  if (!question.trim()) throw new Error("用户输入不能为空。");
+  if (threadId !== undefined && !threadId.trim()) throw new Error("会话标识不能为空。");
   const startedAt = performance.now();
   let answer = "";
   const stream = await agent.stream(
     { messages: [{ role: "user", content: question }] },
-    { streamMode: ["messages", "updates", "values"] },
+    {
+      streamMode: ["messages", "updates", "values"],
+      ...(threadId === undefined ? {} : { configurable: { thread_id: threadId } }),
+    },
   );
 
   for await (const [mode, data] of stream) {

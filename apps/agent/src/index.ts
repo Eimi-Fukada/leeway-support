@@ -1,15 +1,20 @@
 import { createSupportAgent } from "./agent.ts";
 import { createModel } from "./model.ts";
-import { runSupportCli } from "./cli-run.ts";
+import { createInterface } from "node:readline";
+import { MemorySaver } from "@langchain/langgraph";
+import { chat } from "./chat.ts";
 
 async function main(): Promise<void> {
   // 配置读取和校验在函数调用时执行，抛错会进入 main().catch。
   const model = createModel();
-  const agent = createSupportAgent(model);
-  const question = "你好，请简要介绍你现在能够做什么，以及还不能做什么。";
-  console.log("[用户]", question);
-  // 一次主 Agent 流式执行；逐步输出片段，最终结果也从这次流取得。
-  await runSupportCli(agent, question, undefined, process.argv.slice(2).includes("--debug"));
+  // 一个进程复用同一个 Agent 与 saver；每轮通过 thread_id 恢复会话状态。
+  const agent = createSupportAgent(model, new MemorySaver());
+  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  try {
+    await chat(agent, lines, undefined, process.argv.slice(2).includes("--debug"));
+  } finally {
+    lines.close();
+  }
 }
 
 main().catch((error: unknown) => {

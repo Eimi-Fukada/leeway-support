@@ -6,8 +6,8 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "dev": "turbo run dev --log-order=stream",
-    "start": "turbo run start --log-order=stream",
+    "dev": "pnpm --filter @leeway-support/agent dev",
+    "start": "pnpm --filter @leeway-support/agent start",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

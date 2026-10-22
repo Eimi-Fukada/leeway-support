@@ -17,7 +17,7 @@
 | 模型接入与执行基础 A | `model.ts`、`shared/model.ts`、`模型接入说明.md`、各主题测试；待补统一的故障注入实验 | 配置和 Agent 解耦；无密钥复现流程；超时、取消、错误可区分 |
 | Agent 循环与工具 B1–B3 | `beginner.ts`、`shared/orders.ts` | 第一个只读业务查询；看清模型 → tool_calls → 工具结果 → 模型的循环及停止条件 |
 | Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 工具参数、工具结果、最终回答分别校验；无效输出不能生成成功卡片 |
-| 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`；待补持久化/归属实验 | 多轮指代、会话隔离、重启恢复；remember 示例是 state 更新，不是长期记忆 |
+| 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`；待补持久化/归属实验 | C2 已进入正常主路径：连续输入、MemorySaver、thread 隔离及失败状态测试；持久重启恢复/归属鉴权未实现；remember 示例是 state 更新，不是长期记忆 |
 | 长期记忆 C5–C7 | 待补 `labs/long-term-memory/` | 跨会话偏好、来源、删除、冲突；不能把实时业务事实永久记住 |
 | 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | 长对话预算；对照摘要与输出清理；关键动作/授权不靠摘要保存 |
 | Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；待补可信身份和执行侧鉴权实验 | 顺序可观测；并行调用也计数；不把隐藏工具当成授权 |
@@ -91,6 +91,6 @@
 
 ## 下一小步
 
-现有基础是无工具 Agent、可注入模型、fakeModel 流程测试和正常/调试入口共用的单次流式执行（见 [本次迭代](iterations/stream-main-path.md)）。下一切片建议只做 B1/B2：定义可信调用上下文和一个只读 `get_task_status` 的契约，先用固定数据直接执行。验收合法参数、非法参数、无此任务和越权的差异；此时不声称已接真实业务。
+现有基础已从 [共享流式执行](iterations/stream-main-path.md) 推进到 [多轮流式对话](iterations/multi-turn-chat.md)：连续输入、MemorySaver、同 thread 历史与新会话隔离都在正常主入口使用。当前先完善 Agent 编排，下一切片优先讨论持久 checkpoint 的存储与重启恢复。
 
-之后 B3 才把工具注册到 Agent，用脚本模型验证消息轨迹和停止，再单独验证真实模型会不会正确选择工具、缺参数时是否追问。知识库链路在只读工具循环稳定后，从固定证据与引用开始逐步接入；无需等所有高级中间件完成。
+业务工具与身份契约在真实嵌入集成时推进；知识库/RAG 独立从证据与引用开始。长期记忆、中间件和子 Agent 按具体需求选择，不为学习数量提前装配。

@@ -1,6 +1,6 @@
 # Leeway Support
 
-逐步建设的智能客服系统，当前完成最小工作区、无工具 Agent 的真实问答与离线流程测试。
+逐步建设的智能客服系统，当前支持无工具 Agent 的多轮流式对话、会话级内存 checkpoint 与离线流程测试。
 
 开发遵守 [小步迭代约定](AGENTS.md)，每项功能先说明解决的问题、主流实现方式和替代方案，再给出调用链与验证结果。[学习覆盖表](docs/learning-coverage.md) 连接本项目与 `E:/GraceProject/agent-practice` 的已有实验及待补知识点；[细粒度路线图](docs/agent-development-roadmap.md) 规定推进顺序。
 
@@ -20,13 +20,13 @@ pnpm install
 ## 运行
 
 ```sh
-# 启动开发模式，修改源码后重新调用模型；Ctrl+C 退出
+# 启动开发模式，修改源码会重启并丢失内存会话
 pnpm dev
 
-# 执行一次固定问题的流式问答，结束后退出
+# 连续输入问题，每轮流式回答；/new 新会话，/exit 退出
 pnpm start
 
-# 单次流式调试，观察文本片段、节点更新和最终结果
+# 多轮对话时额外观察文本片段、节点更新和每轮最终结果
 pnpm start -- --debug
 
 # 使用 fakeModel 验证 Agent 流程，不需要模型配置、不发真实模型请求
@@ -49,21 +49,34 @@ OPENAI_BASE_URL=https://your-provider.example/v1
 OPENAI_API_MODE=responses
 ```
 
-模型服务必须兼容所选接口；不根据模型名称猜测接口模式。入口静态导入 `createModel`，在 main 中调用后才使用 Node 内置 `loadEnvFile` 加载文件、校验配置并创建模型；导入模块本身不执行这些操作。环境文件相对 model.ts 定位，运行环境已有的同名变量优先。配置错误在 main 执行期间抛出，进入 main().catch 的统一处理。Turbo 的 dev/start 允许传递这四个变量，不缓存真实模型调用。
+模型服务必须兼容所选接口；不根据模型名称猜测接口模式。入口静态导入 `createModel`，在 main 中调用后才使用 Node 内置 `loadEnvFile` 加载文件、校验配置并创建模型；导入模块本身不执行这些操作。环境文件相对 model.ts 定位，运行环境已有的同名变量优先。配置错误在 main 执行期间抛出，进入 main().catch 的统一处理。dev/start 通过 pnpm 直接启动应用，继承运行环境，不经过任务缓存。
 
-启动时会发送一个固定问题并输出真实回答（以下回答内容以实际模型为准）：
+启动后等待输入，不自动发送固定问题。可连续追问（以下回答内容以实际模型为准）：
 
 ```text
-[用户] 你好，请简要介绍你现在能够做什么，以及还不能做什么。
+你> 我使用的是桌面版。
 [客服] ……
 [完成] 耗时 … ms
+你> 我刚才说的是哪个版本？
+[客服] 桌面版。
+[完成] 耗时 … ms
+你> /new
+[新会话] …
+你> /exit
+[会话结束]
 ```
 
-真实入口每次运行会请求模型并产生相应费用，自动重试已关闭，单次模型请求超时为 60 秒。开发模式继续监听源码变化，每次重启都会再次发出请求。配置缺失或接口模式不合法会在请求前报错；调用失败以非零状态退出，不输出原始请求、密钥或供应商错误内容。
+每条非空问题会请求模型并产生相应费用；空行、/new、/exit 和未知命令不调用模型。同一会话逐轮串行执行，后续轮次由 checkpoint 加载历史，每轮仅提交新增用户消息。自动重试已关闭，单次模型请求超时为 60 秒。开发模式监听源码变化，重启会清空内存会话并重新等待输入。配置缺失或接口模式不合法会在请求前报错；调用失败停止输入循环，以非零状态退出，不输出原始请求、密钥或供应商错误内容。
+
+## 会话与短期记忆
+
+index.ts 为本进程创建一个 MemorySaver 和 Agent；chat.ts 生成 thread_id，同一会话复用该 ID，/new 生成新 ID。历史由 Graph state 和 checkpointer 管理，不在终端代码中手工拼接。/new 只切换会话，不等于删除旧 checkpoint；进程退出后所有内存 checkpoint 丢失。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
+
+失败轮可能已保存用户输入，但不会把断流片段当作成功回答；本轮不实现自动恢复或回滚。当前会话 ID 只是本地状态分区，不提供多用户身份验证或访问控制。长期记忆、持久化重启恢复、摘要和并发控制仍未实现。详细取舍与验证见 [多轮流式对话迭代](docs/iterations/multi-turn-chat.md)。
 
 ## 执行过程观察
 
-`pnpm start` / `pnpm dev` 使用同一个 index.ts 入口，通过 `runSupportAgent` 调用主 Agent 的 `stream`。默认连续输出文本片段；执行 `pnpm start -- --debug`（开发模式为 `pnpm dev -- --debug`）额外展示片段所属节点、节点更新和最终回答。`--` 后的参数经 Turbo 转发到应用，index.ts 读取 `--debug` 切换展示。需要模型服务支持流式响应；dev/start 不缓存，根命令指定 `--log-order=stream` 转发输出，避免按任务分组攒到结束才显示。
+`pnpm start` / `pnpm dev` 使用同一个 index.ts 入口，每轮通过 `runSupportAgent` 调用主 Agent 的 `stream`。默认连续输出文本片段；执行 `pnpm start -- --debug`（开发模式为 `pnpm dev -- --debug`）额外展示片段所属节点、节点更新和最终回答。参数由 pnpm 传到应用，index.ts 读取 `--debug` 切换展示。需要模型服务支持流式响应。交互入口直接启动应用，以保留 stdin 和逐片段 stdout；Turbo 继续运行 test/typecheck。
 
 `src/run.ts` 统一消费一次执行中的三类 streamMode；`src/cli-run.ts` 控制普通/调试展示：
 
@@ -106,6 +119,8 @@ OPENAI_API_MODE=responses
 
 `tests/cli-run.test.ts` 验证正常入口所用的同一展示/执行路径：模型在首段输出后暂停，收到消费者确认后才继续，以此证明完成前已展示文本；同时验证单次执行、最终结果、不重复打印、断流、空回答和输出范围。
 
+`tests/memory.test.ts` 检查模型实际收到的历史、thread 隔离、saver 生命周期、失败轮 checkpoint 和空输入拒绝；`tests/chat.test.ts` 检查连续输入、命令、串行执行、失败停止及 EOF。基础 agent.test.ts 保留未注入 saver 的无记忆对照，不代表真实入口未启用记忆。
+
 `respond(message)` 安排测试消息，`respond(messages => ...)` 在模型边界检查输入并生成测试返回值，`respond(error)` 注入错误。fakeModel 不理解问题，测试不证明真实模型会遵循提示词或正确选择工具；真实供应商能力另行验证。之后添加工具、中间件或结构化输出时，围绕实际流程扩展场景与断言。当前没有添加这些业务能力。
 
 ## 目录和调用链
@@ -113,13 +128,16 @@ OPENAI_API_MODE=responses
 ```text
 apps/agent/
   src/index.ts           应用执行入口
+  src/chat.ts            连续输入、会话 ID、/new 和 /exit
   src/model.ts           定义 createModel，调用时加载配置并创建真实模型
-  src/agent.ts           Agent 工厂，接收模型并定义提示词和工具列表
+  src/agent.ts           Agent 工厂，接收模型与可选 checkpointer
   src/run.ts             单次 stream 执行、事件投影与最终结果校验
   src/cli-run.ts         普通连续文本 / 调试事件两种终端展示
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
   tests/cli-debug.test.ts 调试展示的成功、失败、断流和输出范围测试
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
+  tests/chat.test.ts     连续输入、命令、失败停止与 EOF
+  tests/memory.test.ts   多轮历史、隔离、checkpoint 生命周期与失败状态
   package.json           Agent 自己的命令和依赖
   tsconfig.json          Agent 的 TypeScript 配置
 docs/                    技术方案和调研记录
@@ -129,24 +147,25 @@ pnpm-lock.yaml           固定整个工作区的依赖解析结果
 turbo.json               声明任务的缓存和运行方式
 ```
 
-以 `pnpm dev` 为例：根 package.json → `turbo run dev` → 工作区中 Agent 的 `dev` 脚本 → `tsx watch src/index.ts` → 执行入口。
+以 `pnpm dev` 为例：根 package.json → `pnpm --filter @leeway-support/agent dev` → `tsx watch src/index.ts` → 执行入口。交互进程直接接收终端输入；本次验证中原 Turbo 启动路径未转发输入，故不再用它启动聊天。
 
 应用内的调用链：
 
 ```text
-index.ts      → createModel() → createSupportAgent(model) → runSupportCli（按 --debug 选择展示）→ runSupportAgent → stream
+index.ts      → createModel() → createSupportAgent(model, MemorySaver) → chat（thread_id）
+每轮输入      → runSupportCli（按 --debug 选择展示）→ runSupportAgent → stream（新增消息 + thread_id）
 agent.test.ts → fakeModel 控制响应或错误               → createSupportAgent(model) → invoke → 断言执行行为
 ```
 
 以上路径共用 agent.ts 中的定义；正常和调试展示使用同一应用入口和执行层。工厂每次调用创建一个 Agent 实例；依赖注入在这里就是把模型作为函数参数传入，没有额外容器。
 
-ChatOpenAI 负责与模型接口通信，createAgent 负责执行流程；createAgent 内部基于 LangGraph，因此本阶段安装了相关依赖但尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作、会话持久化或交互式终端输入。
+ChatOpenAI 负责与模型接口通信，createAgent 负责执行流程，MemorySaver 保存进程内会话状态。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或持久存储。
 
-pnpm 负责多包依赖和安装；Turbo 负责调度各包的任务。dev 和 start 每次真实执行，不缓存；typecheck 可复用缓存，只缓存检查结果，不生成编译产物。
+pnpm 负责多包依赖和安装，并直接启动 dev/start 交互进程；Turbo 调度 test/typecheck。test 每次执行，typecheck 可复用缓存，只缓存检查结果，不生成编译产物。
 
 TypeScript 负责类型检查，tsx 负责运行源码。本地模块导入使用实际 `.ts` 扩展名，配置已开启 `allowImportingTsExtensions` 和 `noEmit`。当前没有 JavaScript 构建步骤。
 
-也可以跳过 Turbo，单独运行应用以排查问题：
+也可以直接选择应用运行，效果与根 start 相同：
 
 ```sh
 pnpm --filter @leeway-support/agent start

@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "start": "turbo run start",
+    "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

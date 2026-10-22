@@ -3,9 +3,14 @@
   "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API_MODE"]
     },
     "start": {
+      "cache": false,
+      "passThroughEnv": ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_API_MODE"]
+    },
+    "test": {
       "cache": false
     },
     "typecheck": {

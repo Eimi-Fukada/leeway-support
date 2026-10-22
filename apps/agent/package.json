@@ -5,11 +5,18 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "tsx": "4.23.15",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.20",
+    "@langchain/langgraph": "1.5.2",
+    "@langchain/openai": "1.6.3",
+    "langchain": "1.5.18"
   }
 }

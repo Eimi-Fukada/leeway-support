@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @leeway-support/agent dev",
     "start": "pnpm --filter @leeway-support/agent start",
     "test": "turbo run test",
+    "test:postgres": "pnpm --filter @leeway-support/agent test:postgres",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

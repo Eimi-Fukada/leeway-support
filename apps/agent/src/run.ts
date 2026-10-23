@@ -13,14 +13,17 @@ export async function runSupportAgent(
   threadId?: string,
 ): Promise<{ answer: string; elapsedMs: number }> {
   if (!question.trim()) throw new Error("用户输入不能为空。");
-  if (threadId !== undefined && !threadId.trim()) throw new Error("会话标识不能为空。");
+  if (threadId !== undefined && !threadId.trim())
+    throw new Error("会话标识不能为空。");
   const startedAt = performance.now();
   let answer = "";
   const stream = await agent.stream(
     { messages: [{ role: "user", content: question }] },
     {
       streamMode: ["messages", "updates", "values"],
-      ...(threadId === undefined ? {} : { configurable: { thread_id: threadId } }),
+      ...(threadId === undefined
+        ? {}
+        : { configurable: { thread_id: threadId } }),
     },
   );
 
@@ -30,10 +33,15 @@ export async function runSupportAgent(
       // 当前是无工具的单模型 Agent，仅投影文本。
       // 增加工具/内部模型节点时，需重新定义哪些消息可以面向用户展示。
       if (message.text) {
-        onEvent({ type: "text", text: message.text, node: metadata.langgraph_node ?? "model" });
+        onEvent({
+          type: "text",
+          text: message.text,
+          node: metadata.langgraph_node ?? "model",
+        });
       }
     } else if (mode === "updates") {
-      for (const node of Object.keys(data)) onEvent({ type: "node-update", node });
+      for (const node of Object.keys(data))
+        onEvent({ type: "node-update", node });
     } else if (mode === "values") {
       const last = data.messages.at(-1);
       answer = last && AIMessage.isInstance(last) ? last.text : "";

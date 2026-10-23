@@ -2,9 +2,11 @@
 
 日期：2026-10-22。状态：逐项推进的开发路线，未完成条目不授权批量实现。每次迭代遵守根目录 AGENTS.md，按 [学习覆盖与迭代模板](learning-coverage.md) 解释问题、主流实现、替代方案与验证结果。
 
-当前已实现（按源码核对）：pnpm/Turbo 工作区、apps/agent、环境加载、ChatOpenAI、无工具 createAgent、可注入模型、fakeModel 离线流程测试，以及正常/调试展示共用的 stream 执行层。主入口已接入连续输入、MemorySaver + thread_id、多轮历史、/new 和 /exit，C2 已落地，见 [多轮对话迭代](iterations/multi-turn-chat.md)。A1 已落地；A2/A3 具备部分基础，但未实现完整场景入口、runId/调用次数观测和故障注入。当前尚未实现工具、结构化结果、长期记忆、持久 checkpoint、知识库/RAG、HTTP 流式服务、CopilotKit 或业务集成。终端流式输出不等于对外流式服务。
+当前已实现（2026-10-23 按源码核对）：pnpm/Turbo 工作区、apps/agent、环境加载、ChatOpenAI、无工具 createAgent、可注入模型、fakeModel 离线流程测试，以及正常/调试展示共用的 stream 执行层。主入口支持连续输入、PostgreSQL checkpoint + thread_id、多轮历史、/new、/exit 和 --thread 恢复已完成会话；C2 与 C4 持久化部分已落地，离线测试保留 MemorySaver。A1 已落地；A2/A3 具备部分基础，但未实现完整场景入口、runId/调用次数观测和故障注入。尚未实现工具、结构化结果、长期记忆、知识库/RAG、HTTP 流式服务、CopilotKit 或业务集成。终端流式输出不等于对外流式服务。
 
 ## 推进方式
+
+2026-10-23 约定更新：主要在本项目真实产品实现和测试中学习；agent-practice 保留相关资料供对照，不强制为每个知识点新增独立演示程序/数据库。下文中的实验计划均按此原则择需调整。当前 checkpoint 表统一使用产品数据库 public。
 
 每次只选择下面一个编号的小单元：说明问题、方案对照与契约 → 在用户已授权范围内实现（业务事实缺失时先澄清）→ 走读调用链 → 验证正常和失败场景 → 更新学习映射。阶段是能力分组，不是一轮代码生成的范围。不预先建立全部目录、接口或通用中间件框架。
 
@@ -47,6 +49,10 @@
 requestId 等可信关联字段由服务端绑定/校验，不依赖模型逐字复述建立信任。模型可产生“建议”，业务层校验事实和规则后才能产生“可执行动作”。工具错误、用户结果类别、Graph 运行状态分别建模，不能混成一个 status 字段。
 
 ## C. 短期记忆、长期记忆与上下文工程
+
+持久化进度：C4 中 PostgreSQL checkpoint 与显式恢复已完成会话已落地，详见 [本轮迭代](iterations/postgres-checkpoint.md)。主入口使用 PostgresSaver，测试保留 MemorySaver；C4 的多用户归属鉴权以及未完成会话的安全续跑尚未实现。
+
+2026-10-23 更新：已确认产品需要长期记忆，C5–C7 保留为明确待办；先讨论记忆场景及读写契约，存储方式另行选择，尚未实现。学习仓库已新增 `记忆与持久化说明.md`，说明文档不替代独立运行实验。
 
 来源：memory.ts、command-update.ts、remember.ts、summarization-middleware.ts、context-editing-middleware.ts。当前学习仓库没有等价完整的生产长期记忆闭环，需要补充设计。
 

@@ -1,24 +1,24 @@
 # 客服产品与 Agent 实践的双向学习覆盖
 
-更新：2026-10-22。状态：开发与学习约定，缺口清单待逐项实施。
+更新：2026-10-23。状态：开发与学习约定，缺口清单待逐项实施。
 
 ## 两个仓库如何配合
 
-`E:/GraceProject/leeway-support` 验证能力能否解决真实客服问题；`E:/GraceProject/agent-practice` 提供对应知识点的最小实验和方案对照。本表覆盖现有技术方案与路线图中的目标知识点，后续新增知识点同步登记。覆盖完成以可运行实验和验证记录为准，不以目录、文档或框架依赖存在为准。
+当前 leeway-support 仓库验证能力能否解决真实客服问题；agent-practice 提供对应知识点的最小实验和方案对照。实验仓库候选路径为 `E:/GraceProject/agent-practice` 与 `E:/Projects/agent-practice`，访问前检查并使用实际存在的目录；若两者都存在，按 AGENTS.md 核对后确定本轮检出。本表覆盖现有技术方案与路线图中的目标知识点，后续新增知识点同步登记。覆盖完成以可运行实验和验证记录为准，不以目录、文档或框架依赖存在为准。
 
-下表的“已有示例”只表示查到对应源码，并未在本轮运行这些示例。说明文档不是完整实验；当前客服项目已存在的代码也不代表已经做过真实业务验收。目标架构见 [技术方案](technical-proposal.md)，细粒度编号见 [路线图](agent-development-roadmap.md)。
+学习主要通过当前产品实际开发与验收完成。下表已有示例供对照，缺口不强制新增演示程序或数据库；优先由产品实现、测试和迭代记录覆盖。代码存在也不代表已经通过真实业务验收。目标架构见 [技术方案](technical-proposal.md)，细粒度编号见 [路线图](agent-development-roadmap.md)。
 
 ## 知识点、场景和缺口
 
-实验路径均相对 `E:/GraceProject/agent-practice`；“待补”是建议落点，尚未创建或实现。
+实验路径均相对本轮实际使用的 agent-practice 根目录；“待补”是建议落点，尚未创建或实现。
 
 | 知识点 / 路线编号 | agent-practice 现有依据或待补实验 | 客服项目要解决的问题 / 验收重点 |
 | --- | --- | --- |
 | 模型接入与执行基础 A | `model.ts`、`shared/model.ts`、`模型接入说明.md`、各主题测试；待补统一的故障注入实验 | 配置和 Agent 解耦；无密钥复现流程；超时、取消、错误可区分 |
 | Agent 循环与工具 B1–B3 | `beginner.ts`、`shared/orders.ts` | 第一个只读业务查询；看清模型 → tool_calls → 工具结果 → 模型的循环及停止条件 |
 | Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 工具参数、工具结果、最终回答分别校验；无效输出不能生成成功卡片 |
-| 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`；待补持久化/归属实验 | C2 已进入正常主路径：连续输入、MemorySaver、thread 隔离及失败状态测试；持久重启恢复/归属鉴权未实现；remember 示例是 state 更新，不是长期记忆 |
-| 长期记忆 C5–C7 | 待补 `labs/long-term-memory/` | 跨会话偏好、来源、删除、冲突；不能把实时业务事实永久记住 |
+| 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`、`记忆与持久化说明.md`；`labs/persistent-memory/` 仅保留产品实践说明 | C2 及 C4 持久化部分已进入主路径：产品数据库 public 中的 PostgreSQL checkpoint、同 thread 历史、--thread 恢复已完成会话；产品跨进程测试已验证。多用户归属鉴权/安全续跑未实现 |
+| 长期记忆 C5–C7 | 已补 `记忆与持久化说明.md`；后续在产品具体场景中补实现、说明与测试 | 已确认需要；首个记忆场景、读写契约与存储方式待讨论，尚未实现。跨会话偏好、来源、删除、冲突；接数据库不自动构成长期记忆，不能把实时业务事实永久记住 |
 | 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | 长对话预算；对照摘要与输出清理；关键动作/授权不靠摘要保存 |
 | Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；待补可信身份和执行侧鉴权实验 | 顺序可观测；并行调用也计数；不把隐藏工具当成授权 |
 | 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；待补模型/工具分类重试实验 | 控制重试放大；部分流输出后的失败；未知写入结果先核对 |
@@ -35,6 +35,15 @@
 | 正式 SDK I6 | 现有 UI 示例作输入；待补 `labs/embedded-sdk/` | 在独立宿主接入，验证公开协议、身份交换、事件/确认/重连和版本兼容 |
 | 运营报表 / DSL | `apps/support-chat/openui/` | 白名单组件和数据源；报表需求出现再装配，不与核心客服链路绑定 |
 | 观测、评估与运行 J | 各主题 `*.test.ts` 提供局部测试；待补 `labs/evaluation/` 与服务故障实验 | trace、调用预算、检索/答案/工具分别评估；发布回滚、数据删除和恢复有证据 |
+
+## 记忆与持久化的概念边界
+
+- `new MemorySaver()` 就是内存 checkpointer；主入口本轮已改为 PostgreSQL saver，离线测试保留 MemorySaver。注入 Agent 并传入同一 thread_id 后，框架保存和恢复该会话状态，后续模型调用可收到历史。
+- 短期记忆的范围是同一个 thread，与是否落数据库无关。MemorySaver 在进程内保存，进程退出丢失；数据库 saver 可跨进程保存同一会话，仍属于短期记忆。
+- 长期记忆面向跨 thread 的偏好或其他经过治理的应用数据；需要定义提取/显式写入、读取范围、来源、冲突、过期和删除机制，通常通过 store 或应用仓储实现。它不等于“引入数据库”；用户已确认需要此能力，具体读写契约和存储方式待讨论，不在本轮实现。
+- Agent Server 是承载 Agent 的服务运行层，提供 threads/runs、流接口、内置持久化及任务队列。采用它时由服务集成相应存储；它不是另一种记忆。云端和自托管的基础设施责任不同，本项目尚未采用。
+
+官方核对（2026-10-23）：[持久化与 checkpointer/store](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[长期记忆](https://docs.langchain.com/oss/javascript/langchain/long-term-memory)、[Agent Server](https://docs.langchain.com/langsmith/agent-server)。
 
 ## 每增加一个功能，先回答什么
 
@@ -55,7 +64,7 @@
    比较正确性、可控性、延迟、成本、维护复杂度；何时值得切换？
    缺少测量时写“待验证”，不写“更先进所以更好”。
 4. 实践与调用链
-   agent-practice 对应实验和命令是什么？缺失时本轮如何补齐？
+   agent-practice 有哪些相关资料？当前产品如何实现并验证这个知识点？不强制另建演示或数据库。
    客服项目的源码入口、数据流、状态变化和关键 API 是什么？
 5. 验证结果
    正常 / 边界 / 失败用例；命令、实际结果、验证层级。
@@ -64,7 +73,7 @@
    实验结论是什么？是否进入产品？哪些未验收？下一小步是什么？
 ```
 
-学习实验围绕当前切片补齐，不先补全上表所有目录。简单功能不必实现全部替代方案；当方案选择依赖效果差异时，才安排可重复的对照实验。
+学习覆盖围绕当前产品切片完成，不先补全上表所有目录，不为学习另配数据库或运行一套重复应用。简单功能不必实现全部替代方案；当方案选择依赖效果差异时，才安排可重复的对照验证。
 
 ## 方案学习的几组核心对照
 
@@ -91,6 +100,6 @@
 
 ## 下一小步
 
-现有基础已从 [共享流式执行](iterations/stream-main-path.md) 推进到 [多轮流式对话](iterations/multi-turn-chat.md)：连续输入、MemorySaver、同 thread 历史与新会话隔离都在正常主入口使用。当前先完善 Agent 编排，下一切片优先讨论持久 checkpoint 的存储与重启恢复。
+现有基础已从 [共享流式执行](iterations/stream-main-path.md)、[多轮流式对话](iterations/multi-turn-chat.md) 推进到 [PostgreSQL checkpoint](iterations/postgres-checkpoint.md)：主入口支持数据库持久化和显式恢复已完成会话；未知或未完成会话拒绝自动恢复。后续优先讨论运行生命周期、分类错误/超时/取消或上下文预算，每轮只选择一个切片；长期记忆需求已确认，存储及读写契约仍待讨论。
 
 业务工具与身份契约在真实嵌入集成时推进；知识库/RAG 独立从证据与引用开始。长期记忆、中间件和子 Agent 按具体需求选择，不为学习数量提前装配。

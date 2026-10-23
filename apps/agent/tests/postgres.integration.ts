@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { createCheckpointer } from "../src/checkpoint.ts";
+import { AIMessage, fakeModel } from "langchain";
+import { createSupportAgent } from "../src/agent.ts";
+import { runSupportCli } from "../src/cli-run.ts";
+
+const exec = promisify(execFile);
+
+test("真实 PostgreSQL：进程退出后新进程恢复已完成会话，不调用真实模型", { timeout: 60_000 }, async () => {
+  const saver = await createCheckpointer();
+  const threadId = `integration-${randomUUID()}`;
+  const cwd = fileURLToPath(new URL("../", import.meta.url));
+  try {
+    for (const phase of ["write", "read"]) {
+      const { stdout } = await exec(process.execPath, ["--import", "tsx", "tests/fixtures/postgres-worker.ts", phase, threadId], {
+        cwd, timeout: 25_000,
+      });
+      assert.match(stdout, /checkpoint-worker-ok/);
+    }
+    assert.ok(await saver.getTuple({ configurable: { thread_id: threadId } }));
+  } finally {
+    // 仅清除此测试创建的随机 thread，不清空共享 schema 或其他用户历史。
+    try { await saver.deleteThread(threadId); }
+    finally { await saver.end(); }
+  }
+});
+
+test("数据库连接失败时安全报错，不自动切回内存", { timeout: 15_000 }, async () => {
+  await assert.rejects(createCheckpointer("postgresql://test:private-test-secret@127.0.0.1:1/unreachable"), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /数据库初始化失败/);
+    assert.doesNotMatch(error.message, /private-test-secret|postgresql:\/\//);
+    return true;
+  });
+});
+
+test("checkpoint 读取失败时终止流程，CLI 不暴露数据库原始错误", { timeout: 15_000 }, async () => {
+  const saver = await createCheckpointer();
+  await saver.end(); // 模拟启动后存储失效，不破坏真实表或其他会话。
+  const model = fakeModel().respond(new AIMessage("不应返回的回答"));
+  const lines: string[] = [];
+  await assert.rejects(runSupportCli(createSupportAgent(model, saver), "测试读失败", (line) => lines.push(line), false, `integration-${randomUUID()}`));
+  assert.equal(model.calls.length, 0);
+  assert.match(lines.join(""), /\[失败\]/);
+  assert.doesNotMatch(lines.join(""), /\[完成\]|postgresql:\/\//);
+});

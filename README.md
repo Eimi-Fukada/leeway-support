@@ -1,8 +1,8 @@
 # Leeway Support
 
-逐步建设的智能客服系统，当前支持无工具 Agent 的多轮流式对话、会话级内存 checkpoint 与离线流程测试。
+逐步建设的智能客服系统，当前支持无工具 Agent 的多轮流式对话、PostgreSQL 会话 checkpoint、显式恢复与离线流程测试。
 
-开发遵守 [小步迭代约定](AGENTS.md)，每项功能先说明解决的问题、主流实现方式和替代方案，再给出调用链与验证结果。[学习覆盖表](docs/learning-coverage.md) 连接本项目与 `E:/GraceProject/agent-practice` 的已有实验及待补知识点；[细粒度路线图](docs/agent-development-roadmap.md) 规定推进顺序。
+开发遵守 [小步迭代约定](AGENTS.md)，每项功能先说明解决的问题、主流实现方式和替代方案，再给出调用链与验证结果。[学习覆盖表](docs/learning-coverage.md) 连接本项目与 agent-practice 的已有实验及待补知识点，实验根目录按约定在两个候选路径中检查；[细粒度路线图](docs/agent-development-roadmap.md) 规定推进顺序。
 
 ## 环境与安装
 
@@ -20,7 +20,7 @@ pnpm install
 ## 运行
 
 ```sh
-# 启动开发模式，修改源码会重启并丢失内存会话
+# 启动开发模式；修改源码会重启，已提交 checkpoint 保留，新启动默认创建新会话
 pnpm dev
 
 # 连续输入问题，每轮流式回答；/new 新会话，/exit 退出
@@ -29,8 +29,14 @@ pnpm start
 # 多轮对话时额外观察文本片段、节点更新和每轮最终结果
 pnpm start -- --debug
 
+# 重启后继续一个已完成会话，ID 使用此前打印的值
+pnpm start -- --thread <会话ID>
+
 # 使用 fakeModel 验证 Agent 流程，不需要模型配置、不发真实模型请求
 pnpm test
+
+# 使用 .env 中的真实 PostgreSQL 验证跨进程恢复，无真实模型请求
+pnpm test:postgres
 
 # 检查 TypeScript 类型，不生成 JavaScript 文件
 pnpm typecheck
@@ -47,9 +53,12 @@ OPENAI_MODEL=模型服务提供的模型ID
 OPENAI_BASE_URL=https://your-provider.example/v1
 # 可选：默认 responses；仅支持 Chat Completions 的服务使用 chat-completions
 OPENAI_API_MODE=responses
+
+# 数据库需提前存在，程序初始化自己的 schema/表；示例不包含真实凭据
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/agent-support
 ```
 
-模型服务必须兼容所选接口；不根据模型名称猜测接口模式。入口静态导入 `createModel`，在 main 中调用后才使用 Node 内置 `loadEnvFile` 加载文件、校验配置并创建模型；导入模块本身不执行这些操作。环境文件相对 model.ts 定位，运行环境已有的同名变量优先。配置错误在 main 执行期间抛出，进入 main().catch 的统一处理。dev/start 通过 pnpm 直接启动应用，继承运行环境，不经过任务缓存。
+模型服务必须兼容所选接口；不根据模型名称猜测接口模式。入口静态导入 `createModel`，在 main 中调用后才使用共享 env.ts 中的 Node 内置 `loadEnvFile` 加载文件、校验配置并创建模型；导入模块本身不执行这些操作。环境文件相对 env.ts 定位，运行环境已有的同名变量优先。配置错误在 main 执行期间抛出，进入 main().catch 的统一处理。dev/start 通过 pnpm 直接启动应用，继承运行环境，不经过任务缓存。
 
 启动后等待输入，不自动发送固定问题。可连续追问（以下回答内容以实际模型为准）：
 
@@ -66,13 +75,15 @@ OPENAI_API_MODE=responses
 [会话结束]
 ```
 
-每条非空问题会请求模型并产生相应费用；空行、/new、/exit 和未知命令不调用模型。同一会话逐轮串行执行，后续轮次由 checkpoint 加载历史，每轮仅提交新增用户消息。自动重试已关闭，单次模型请求超时为 60 秒。开发模式监听源码变化，重启会清空内存会话并重新等待输入。配置缺失或接口模式不合法会在请求前报错；调用失败停止输入循环，以非零状态退出，不输出原始请求、密钥或供应商错误内容。
+每条非空问题会请求模型并产生相应费用；空行、/new、/exit 和未知命令不调用模型。同一会话逐轮串行执行，后续轮次由 checkpoint 加载历史，每轮仅提交新增用户消息。自动重试已关闭，单次模型请求超时为 60 秒。开发模式重启后重新等待输入，恢复历史需传原会话 ID。配置缺失或接口模式不合法会在请求前报错；调用失败停止输入循环，以非零状态退出，不输出原始请求、密钥或供应商错误内容。
 
 ## 会话与短期记忆
 
-index.ts 为本进程创建一个 MemorySaver 和 Agent；chat.ts 生成 thread_id，同一会话复用该 ID，/new 生成新 ID。历史由 Graph state 和 checkpointer 管理，不在终端代码中手工拼接。/new 只切换会话，不等于删除旧 checkpoint；进程退出后所有内存 checkpoint 丢失。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
+index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始化官方 checkpoint 表并注入 Agent；退出时关闭 readline 和连接池。不配置学习专用数据库或 schema。数据库不会由程序创建。chat.ts 默认生成 thread_id；传 --thread 时先检查已保存状态，未知会话或有未完成步骤的会话明确拒绝，避免隐式创建或重试。恢复成功后仅提交新问题，由框架加载历史。/new 生成新 ID，不删除旧 checkpoint。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
 
-失败轮可能已保存用户输入，但不会把断流片段当作成功回答；本轮不实现自动恢复或回滚。当前会话 ID 只是本地状态分区，不提供多用户身份验证或访问控制。长期记忆、持久化重启恢复、摘要和并发控制仍未实现。详细取舍与验证见 [多轮流式对话迭代](docs/iterations/multi-turn-chat.md)。
+连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，连接池最多 5 个连接。setup 是官方建表/迁移；当前单实例启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；本轮不自动重试或回滚。数据库 checkpoint 仍是短期记忆，长期记忆未接入。
+
+当前是可信本地 CLI，知道会话 ID 不代表在未来多用户服务中拥有权限；身份校验、并发/运行所有权、历史保留/删除、备份恢复和未完成会话的安全续跑仍待设计。见 [PostgreSQL 迭代记录](docs/iterations/postgres-checkpoint.md)。
 
 ## 执行过程观察
 
@@ -130,6 +141,9 @@ apps/agent/
   src/index.ts           应用执行入口
   src/chat.ts            连续输入、会话 ID、/new 和 /exit
   src/model.ts           定义 createModel，调用时加载配置并创建真实模型
+  src/env.ts             加载应用环境，模型/数据库共用
+  src/checkpoint.ts      PostgreSQL 连接池、官方 saver 与初始化
+  src/cli-options.ts     解析 --debug / --thread 参数
   src/agent.ts           Agent 工厂，接收模型与可选 checkpointer
   src/run.ts             单次 stream 执行、事件投影与最终结果校验
   src/cli-run.ts         普通连续文本 / 调试事件两种终端展示
@@ -138,6 +152,7 @@ apps/agent/
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
   tests/chat.test.ts     连续输入、命令、失败停止与 EOF
   tests/memory.test.ts   多轮历史、隔离、checkpoint 生命周期与失败状态
+  tests/postgres.integration.ts 真实数据库、跨进程恢复与连接失败验证
   package.json           Agent 自己的命令和依赖
   tsconfig.json          Agent 的 TypeScript 配置
 docs/                    技术方案和调研记录
@@ -152,14 +167,14 @@ turbo.json               声明任务的缓存和运行方式
 应用内的调用链：
 
 ```text
-index.ts      → createModel() → createSupportAgent(model, MemorySaver) → chat（thread_id）
+index.ts      → createModel() / createCheckpointer() → createSupportAgent(model, PostgresSaver) → chat（thread_id）
 每轮输入      → runSupportCli（按 --debug 选择展示）→ runSupportAgent → stream（新增消息 + thread_id）
 agent.test.ts → fakeModel 控制响应或错误               → createSupportAgent(model) → invoke → 断言执行行为
 ```
 
 以上路径共用 agent.ts 中的定义；正常和调试展示使用同一应用入口和执行层。工厂每次调用创建一个 Agent 实例；依赖注入在这里就是把模型作为函数参数传入，没有额外容器。
 
-ChatOpenAI 负责与模型接口通信，createAgent 负责执行流程，MemorySaver 保存进程内会话状态。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或持久存储。
+ChatOpenAI 负责模型通信，createAgent 负责执行流程，PostgresSaver 保存会话 checkpoint；离线测试仍使用 MemorySaver。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或长期记忆。
 
 pnpm 负责多包依赖和安装，并直接启动 dev/start 交互进程；Turbo 调度 test/typecheck。test 每次执行，typecheck 可复用缓存，只缓存检查结果，不生成编译产物。
 

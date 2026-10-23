@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
-import { loadEnvFile } from "node:process";
-import { fileURLToPath } from "node:url";
 import { ChatOpenAI } from "@langchain/openai";
+import { loadAgentEnv } from "./env.ts";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -15,8 +13,7 @@ function required(name: string): string {
 export function createModel(): ChatOpenAI {
   // 相对当前模块定位 apps/agent/.env，不依赖从哪个目录启动。
   // 部署时可以直接注入环境变量；Node 不会用文件覆盖已有变量。
-  const envPath = fileURLToPath(new URL("../.env", import.meta.url));
-  if (existsSync(envPath)) loadEnvFile(envPath);
+  loadAgentEnv();
 
   const apiKey = required("OPENAI_API_KEY");
   const modelName = required("OPENAI_MODEL");

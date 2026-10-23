@@ -47,3 +47,39 @@ test("EOF 没有输入时正常结束，不发送固定问题", async () => {
   assert.equal(model.calls.length, 0);
   assert.match(output.join(""), /\[会话结束\]/);
 });
+
+test("显式恢复已完成会话后只提交新增问题", async () => {
+  const saver = new MemorySaver();
+  const model = fakeModel().respond(new AIMessage("先前回答")).respond((messages) => {
+    assert.deepEqual(messages.slice(1).map((m) => m.text), ["先前问题", "先前回答", "继续问"]);
+    return new AIMessage("继续回答");
+  });
+  const agent = createSupportAgent(model, saver);
+  await agent.invoke({ messages: [{ role: "user", content: "先前问题" }] }, { configurable: { thread_id: "saved" } });
+  const output: string[] = [];
+  await chat(agent, Readable.from(["继续问", "/exit"]), (text) => output.push(text), false, "saved");
+  assert.match(output.join(""), /已恢复会话/);
+  assert.equal(model.calls.length, 2);
+});
+
+test("不存在或失败未完成的会话不自动恢复、不请求下一轮模型", async () => {
+  const model = fakeModel().respond(new Error("模拟失败"));
+  const agent = createSupportAgent(model, new MemorySaver());
+  await assert.rejects(chat(agent, Readable.from(["问题"]), () => {}, false, "missing"), /未找到/);
+  assert.equal(model.calls.length, 0);
+  await assert.rejects(agent.invoke({ messages: [{ role: "user", content: "失败输入" }] }, {
+    configurable: { thread_id: "failed" },
+  }));
+  await assert.rejects(chat(agent, Readable.from(["重试"]), () => {}, false, "failed"), /未完成步骤/);
+  assert.equal(model.calls.length, 1);
+});
+
+test("恢复校验完成前不创建输入监听，失败时完全不消费输入", async () => {
+  const agent = createSupportAgent(fakeModel(), new MemorySaver());
+  let opened = false;
+  await assert.rejects(chat(agent, () => {
+    opened = true;
+    return Readable.from(["不能丢失的输入"]);
+  }, () => {}, false, "missing"), /未找到/);
+  assert.equal(opened, false);
+});

@@ -1,28 +1,37 @@
 import { createSupportAgent } from "./agent.ts";
 import { createModel } from "./model.ts";
 import { createInterface } from "node:readline";
-import { MemorySaver } from "@langchain/langgraph";
 import { chat } from "./chat.ts";
+import { createCheckpointer } from "./checkpoint.ts";
+import { parseCliOptions } from "./cli-options.ts";
 
 async function main(): Promise<void> {
-  // 配置读取和校验在函数调用时执行，抛错会进入 main().catch。
+  const options = parseCliOptions(process.argv.slice(2));
   const model = createModel();
-  // 一个进程复用同一个 Agent 与 saver；每轮通过 thread_id 恢复会话状态。
-  const agent = createSupportAgent(model, new MemorySaver());
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  const checkpointer = await createCheckpointer();
+  // 一个进程复用一个数据库连接池；正常结束或执行失败都释放连接。
   try {
-    await chat(agent, lines, undefined, process.argv.slice(2).includes("--debug"));
+    const agent = createSupportAgent(model, checkpointer);
+    let lines: ReturnType<typeof createInterface> | undefined;
+    try {
+      await chat(agent, () => {
+        lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+        return lines;
+      }, undefined, options.debug, options.threadId);
+    } finally {
+      lines?.close();
+    }
   } finally {
-    lines.close();
+    await checkpointer.end();
   }
 }
 
 main().catch((error: unknown) => {
   // 不打印原始供应商错误、请求或堆栈，避免其中包含密钥、地址等敏感配置。
-  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回)/.test(error.message)) {
+  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回|数据库配置|数据库初始化|启动参数|会话恢复)/.test(error.message)) {
     console.error("[agent]", error.message);
   } else {
-    console.error("[agent] 模型调用失败，请检查网络、密钥、余额以及模型/接口模式和流式响应是否受支持。");
+    console.error("[agent] 执行失败，请检查模型服务或 PostgreSQL；本轮可能未保存完整结果，不会自动重试。");
   }
   process.exitCode = 1;
 });

@@ -19,7 +19,7 @@
 | Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 工具参数、工具结果、最终回答分别校验；无效输出不能生成成功卡片 |
 | 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`、`记忆与持久化说明.md`；`labs/persistent-memory/` 仅保留产品实践说明 | C2 及 C4 持久化部分已进入主路径：产品数据库 public 中的 PostgreSQL checkpoint、同 thread 历史、--thread 恢复已完成会话；产品跨进程测试已验证。多用户归属鉴权/安全续跑未实现 |
 | 长期记忆 C5–C7 | 已补 `记忆与持久化说明.md`；后续在产品具体场景中补实现、说明与测试 | 已确认需要；首个记忆场景、读写契约与存储方式待讨论，尚未实现。跨会话偏好、来源、删除、冲突；接数据库不自动构成长期记忆，不能把实时业务事实永久记住 |
-| 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | 长对话预算；对照摘要与输出清理；关键动作/授权不靠摘要保存 |
+| 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | C8 已加入产品：官方摘要 + 应用失败校验、内部文本过滤与代码集中配置预算（不使用环境变量）；旧原文保留历史 checkpoint，摘要状态可跨进程恢复。C9 工具输出清理未实现，模型窗口/摘要保真仍待校准 |
 | Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；待补可信身份和执行侧鉴权实验 | 顺序可观测；并行调用也计数；不把隐藏工具当成授权 |
 | 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；待补模型/工具分类重试实验 | 控制重试放大；部分流输出后的失败；未知写入结果先核对 |
 | 工具发现 D11–D12 | `llm-tool-selector-middleware.ts`、`provider-tool-search-middleware.ts` | 大工具集是否值得预筛；比较成本、漏选与提供商限制 |
@@ -99,6 +99,10 @@
 三者各选一个最小例子分别实践；MCP 工具调用不自动实现持久事件消费。真实业务项目、首个事件名称和载荷尚未确定。
 
 ## 下一小步
+
+已增加 [会话摘要](iterations/conversation-summary.md)，短会话不增加调用；触发时摘要旧前缀并保留近期消息，无效摘要拒绝更新。模型预算是近似值，后续按真实语料验证；不等同长期记忆。
+
+该切片 39 个本地测试、4 个真实 PostgreSQL 测试通过；真实摘要模型调用超时，保护逻辑已拒绝更新，LangSmith 能定位内部模型错误。真实供应商的成功摘要尚未验收，不把模拟/持久化验证等同于模型成功。
 
 源码组织已按 [整理记录](iterations/source-organization.md)收敛到 agent/、cli/、config/ 三类职责；当前路径以 README 为准。属于已有功能重组，不新增独立知识点或演示。
 

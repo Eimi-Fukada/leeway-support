@@ -49,3 +49,27 @@ test("checkpoint 读取失败时终止流程，CLI 不暴露数据库原始错�
   assert.match(lines.join(""), /\[失败\]/);
   assert.doesNotMatch(lines.join(""), /\[完成\]|postgresql:\/\//);
 });
+
+test("摘要后的状态跨进程恢复，旧 checkpoint 仍保留原文", { timeout: 60_000 }, async () => {
+  const saver = await createCheckpointer();
+  const threadId = `integration-summary-${randomUUID()}`;
+  try {
+    for (const phase of ["write", "read"]) {
+      const { stdout } = await exec(process.execPath, ["--import", "tsx", "tests/fixtures/summary-worker.ts", phase, threadId], {
+        cwd: fileURLToPath(new URL("../", import.meta.url)), timeout: 25_000,
+      });
+      assert.match(stdout, /summary-worker-ok/);
+    }
+    let hasOriginal = false;
+    let hasSummary = false;
+    for await (const entry of saver.list({ configurable: { thread_id: threadId } })) {
+      const text = JSON.stringify(entry.checkpoint.channel_values.messages);
+      hasOriginal ||= text.includes("原始问题使用桌面版。");
+      hasSummary ||= text.includes('"lc_source":"summarization"');
+    }
+    assert.ok(hasOriginal && hasSummary);
+  } finally {
+    try { await saver.deleteThread(threadId); }
+    finally { await saver.end(); }
+  }
+});

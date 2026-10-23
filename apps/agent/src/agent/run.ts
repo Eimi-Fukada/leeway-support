@@ -37,6 +37,8 @@ export async function runSupportAgent(
   for await (const [mode, data] of stream) {
     if (mode === "messages") {
       const [message, metadata] = data;
+      // 摘要是内部模型调用，即使供应商产生片段，也不能混进客服正文。
+      if (metadata.lc_source === "summarization" || metadata.tags?.includes("nostream")) continue;
       // 当前是无工具的单模型 Agent，仅投影文本。
       // 增加工具/内部模型节点时，需重新定义哪些消息可以面向用户展示。
       if (message.text) {

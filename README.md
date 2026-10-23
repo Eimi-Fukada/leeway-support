@@ -114,6 +114,29 @@ index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始�
 
 `stream` 的多模式接口适合直接观察 Graph 运行事件。[官方文档](https://docs.langchain.com/oss/javascript/langgraph/streaming)目前也推荐新应用评估 event streaming 的独立投影接口；此处为理解已有 streamMode 知识点，先保留一条迭代器中的明确分支，不同时接入两种流 API。
 
+## 会话摘要中间件
+
+Agent 已装配官方 `summarizationMiddleware`，在 `beforeModel` 阶段检查历史消息。默认超过近似 6000 Token 时压缩早期记录，保留最近 8 条消息（不是 8 轮）；短会话不增加摘要请求。策略直接写在 [summarization.ts](apps/agent/src/agent/summarization.ts) 的 `SUMMARY_CONFIG` 中，不使用环境变量：
+
+```ts
+const SUMMARY_CONFIG = {
+  triggerTokens: 6_000,
+  keepMessages: 8,
+};
+```
+
+本轮复用当前配置的模型生成摘要，触发时增加一次真实模型调用，未新增供应商配置或廉价模型假设。代码支持单独注入摘要模型以便测试和后续选型。摘要不是长期记忆，也不会提升模型权限。
+
+调用链：index.ts 创建 Agent → agent/agent.ts 按代码中的策略注册中间件 → 恢复历史、合入新消息 → beforeModel 检查 → 必要时调用摘要模型 → 验证有效且确实缩短 → 更新 messages → 主模型回答 → PostgreSQL 保存新状态。
+
+摘要调用打有框架内部标记；run.ts 过滤 `lc_source=summarization` / `nostream`，其文本不显示在终端，但启用 LangSmith 时仍可查看对应模型调用。失败、空摘要、未缩短历史会停止本轮，不将框架生成的错误文字当作摘要保存；原消息保持，失败轮可能已提交的新输入仍按已有 checkpoint 语义保留。
+
+计数沿用当前框架 `countTokensApproximately` 的字符估算，不是精确 tokenizer；中文、工具、多模态、系统提示词和模型输出预留需后续按供应商校准。6000 是可调整的初始应用预算，不是该模型窗口已验证的结论。当前若消息估算超过 16000，在摘要调用前拒绝处理，避免默认截取一部分旧历史再总结；单条超长输入也可能触发此拒绝。最近保留消息无法压缩时不保证落到阈值以下。
+
+压缩改变最新会话 messages，旧原文仍在此前的数据库 checkpoint，未删除旧表记录；跨进程恢复使用最新摘要状态。checkpoint 不是专门的聊天档案，未来清理历史时要另定原文保留政策。失败/未完成会话仍不自动重试。
+
+取舍、测试和供应商验证见 [摘要迭代记录](docs/iterations/conversation-summary.md)。启动方式仍是 `pnpm start -- --debug`。调低触发阈值可以检查触发行为，但会增加调用次数；不要把低阈值测试配置当成生产容量结论。
+
 ## LangSmith 执行追踪
 
 Agent 和 PostgreSQL 仍在本机运行；本功能仅上传追踪，不启动 Agent Server 或本地 LangSmith。官方接入机制于 2026-10-23 核对，SDK 固定为 langsmith 0.11.0。
@@ -171,6 +194,7 @@ apps/agent/
     agent/
       agent.ts          Agent 定义，接收模型与 checkpointer
       run.ts            单轮 stream 执行、事件投影与最终结果校验
+      summarization.ts  摘要预算、官方中间件及失败保护
     cli/
       chat.ts           启动参数、会话恢复、输入循环与终端展示
     config/

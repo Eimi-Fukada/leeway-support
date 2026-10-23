@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   // 不打印原始供应商错误、请求或堆栈，避免其中包含密钥、地址等敏感配置。
-  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回|数据库配置|数据库初始化|启动参数|会话恢复|追踪配置)/.test(error.message)) {
+  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回|数据库配置|数据库初始化|启动参数|会话恢复|追踪配置|摘要配置|摘要失败)/.test(error.message)) {
     console.error("[agent]", error.message);
   } else {
     console.error("[agent] 执行失败，请检查模型服务或 PostgreSQL；本轮可能未保存完整结果，不会自动重试。");

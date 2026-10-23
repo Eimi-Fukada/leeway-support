@@ -18,7 +18,7 @@
 | Agent 循环与工具 B1–B3 | `beginner.ts`、`shared/orders.ts` | 第一个只读业务查询；看清模型 → tool_calls → 工具结果 → 模型的循环及停止条件 |
 | Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 工具参数、工具结果、最终回答分别校验；无效输出不能生成成功卡片 |
 | 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`、`记忆与持久化说明.md`；`labs/persistent-memory/` 仅保留产品实践说明 | C2 及 C4 持久化部分已进入主路径：产品数据库 public 中的 PostgreSQL checkpoint、同 thread 历史、--thread 恢复已完成会话；产品跨进程测试已验证。多用户归属鉴权/安全续跑未实现 |
-| 长期记忆 C5–C7 | 已补 `记忆与持久化说明.md`；后续在产品具体场景中补实现、说明与测试 | 已确认需要；首个记忆场景、读写契约与存储方式待讨论，尚未实现。跨会话偏好、来源、删除、冲突；接数据库不自动构成长期记忆，不能把实时业务事实永久记住 |
+| 长期记忆 C5–C7 | 本轮检出只有 `memory.ts` / `remember.ts` 等短期状态对照；此前引用的 `记忆与持久化说明.md` 本轮未找到，由产品源码/测试完成实践 | 已接 SupportContext、PostgreSQL 应用记忆仓储与模型自主选择的三项记忆工具，支持来源/版本/幂等、跨会话读取、修正和遗忘；不依赖触发词，见 [迭代](iterations/support-context-long-term-memory.md)。线上身份认证、后台整合和提取质量评估仍未完成 |
 | 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | C8 已加入产品：官方摘要 + 应用失败校验、内部文本过滤与代码集中配置预算（不使用环境变量）；旧原文保留历史 checkpoint，摘要状态可跨进程恢复。C9 工具输出清理未实现，模型窗口/摘要保真仍待校准 |
 | Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；可信身份和执行侧鉴权未实现 | D3/D4 已装配主 Agent，明确模型步骤/工具准入计数、每轮清零与 checkpoint 跨进程累计、超限报错、并行批次整批拒绝，见 [迭代记录](iterations/call-limits.md)。不是费用账本/多用户配额；生产工具列表仍空 |
 | 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；模型分类重试通过产品故障注入测试学习 | D7 主回答有限重试、片段后不重试；D9 输入侧邮箱/银行卡/大陆手机号在 Graph 前脱敏、历史在摘要前清理、追踪上传脱敏已落地，见 [迭代记录](iterations/middleware-retry-pii.md)。输出防泄漏、全 PII 治理、工具重试和降级未实现 |
@@ -40,7 +40,7 @@
 
 - `new MemorySaver()` 就是内存 checkpointer；主入口本轮已改为 PostgreSQL saver，离线测试保留 MemorySaver。注入 Agent 并传入同一 thread_id 后，框架保存和恢复该会话状态，后续模型调用可收到历史。
 - 短期记忆的范围是同一个 thread，与是否落数据库无关。MemorySaver 在进程内保存，进程退出丢失；数据库 saver 可跨进程保存同一会话，仍属于短期记忆。
-- 长期记忆面向跨 thread 的偏好或其他经过治理的应用数据；需要定义提取/显式写入、读取范围、来源、冲突、过期和删除机制，通常通过 store 或应用仓储实现。它不等于“引入数据库”；用户已确认需要此能力，具体读写契约和存储方式待讨论，不在本轮实现。
+- 长期记忆面向跨 thread 的偏好或其他经过治理的应用数据。本轮通过主 Agent 自主选择工具 + 应用仓储实现来源、范围、幂等、版本与遗忘；不是数据库自动提取记忆，也不把实时业务状态当作长期事实。自动过期、后台整合和线上身份认证仍未实现。
 - Agent Server 是承载 Agent 的服务运行层，提供 threads/runs、流接口、内置持久化及任务队列。采用它时由服务集成相应存储；它不是另一种记忆。云端和自托管的基础设施责任不同，本项目尚未采用。
 
 官方核对（2026-10-23）：[持久化与 checkpointer/store](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[长期记忆](https://docs.langchain.com/oss/javascript/langchain/long-term-memory)、[Agent Server](https://docs.langchain.com/langsmith/agent-server)。
@@ -112,6 +112,6 @@
 
 同日配置精简：当前无需跨工作区指定目标，已彻底移除 Workspace ID 环境项及应用读取/校验；上段是排障过程，现有设置以 README 和 .env.example 为准。保留实际需要的追踪开关、Key、Agent/环境、endpoint、超时和数据隐藏选项。
 
-现有基础已从 [共享流式执行](iterations/stream-main-path.md)、[多轮流式对话](iterations/multi-turn-chat.md) 推进到 [PostgreSQL checkpoint](iterations/postgres-checkpoint.md)：主入口支持数据库持久化和显式恢复已完成会话；未知或未完成会话拒绝自动恢复。后续优先讨论运行生命周期、分类错误/超时/取消或上下文预算，每轮只选择一个切片；长期记忆需求已确认，存储及读写契约仍待讨论。
+现有主路径已接 [SupportContext 与长期记忆](iterations/support-context-long-term-memory.md)，CLI 必须指定开发身份；跨会话记忆与会话 checkpoint 分开存储。下一切片可根据真实误记/漏记或集成需求选择记忆质量评估、身份交换/API 或运行生命周期，未因本轮完成就宣告线上认证已实现。
 
 业务工具与身份契约在真实嵌入集成时推进；知识库/RAG 独立从证据与引用开始。长期记忆、中间件和子 Agent 按具体需求选择，不为学习数量提前装配。

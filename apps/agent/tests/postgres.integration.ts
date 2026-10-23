@@ -9,8 +9,91 @@ import { AIMessage, fakeModel } from "langchain";
 import { createSupportAgent } from "../src/agent/agent.ts";
 import { runSupportCli } from "../src/cli/chat.ts";
 import { runSupportAgent } from "../src/agent/run.ts";
+import { createMemory } from "../src/config/memory.ts";
+import { createDatabasePool } from "../src/config/database.ts";
+import { localSupportContext, memoryScope } from "../src/support-context.ts";
 
 const exec = promisify(execFile);
+
+test("真实 PostgreSQL：长期记忆跨进程/新 thread 读取，与 checkpoint 独立", { timeout: 60_000 }, async () => {
+  const user = `integration-memory-${randomUUID()}`;
+  const pool = createDatabasePool();
+  try {
+    for (const phase of ["seed", "check"]) {
+      const { stdout } = await exec(process.execPath, ["--import", "tsx", "--import", "./tests/setup.ts", "tests/fixtures/long-term-worker.ts", phase, user], {
+        cwd: fileURLToPath(new URL("../", import.meta.url)), timeout: 25_000,
+      });
+      assert.match(stdout, /long-term-worker-ok/);
+    }
+  } finally {
+    const scope = memoryScope(localSupportContext(user));
+    try {
+      await pool.query("DELETE FROM public.support_memory_operations WHERE scope=$1", [scope]);
+      await pool.query("DELETE FROM public.support_memories WHERE scope=$1", [scope]);
+    } finally { await pool.end(); }
+  }
+});
+
+test("真实 PostgreSQL：记忆幂等、版本竞争、用户隔离、脱敏和遗忘", { timeout: 30_000 }, async () => {
+  const memory = await createMemory();
+  const pool = createDatabasePool();
+  const alice = localSupportContext(`integration-memory-${randomUUID()}`);
+  const bob = localSupportContext(`integration-memory-${randomUUID()}`);
+  const fact = "公司只能离线部署，联系 user@example.com";
+  const base = { threadId: "fixture-thread", messageId: "fixture-message", sourceText: fact, evidenceQuote: fact };
+  try {
+    const input = { ...base, operationId: "save-op", change: { action: "save" as const, content: fact } };
+    const saved = await memory.service.write(alice, input);
+    assert.equal(saved.status, "saved");
+    if (saved.status !== "saved") throw new Error("expected saved");
+    assert.deepEqual(await memory.service.write(alice, input), saved);
+    assert.equal((await memory.service.list(alice)).length, 1);
+    assert.match((await memory.service.list(alice))[0]!.content, /REDACTED_EMAIL/);
+    assert.deepEqual(await memory.service.list(bob), []);
+    const update = { action: "update" as const, id: saved.id, expectedVersion: 1, content: "公司目前可以联网" };
+    const revised = { threadId: "t2", messageId: "m2", sourceText: "公司目前可以联网", evidenceQuote: "公司目前可以联网" };
+    assert.deepEqual(await memory.service.write(bob, { ...revised, operationId: "foreign", change: update }), { status: "rejected", code: "NOT_FOUND" });
+    const results = await Promise.all(["update-1", "update-2"].map((operationId) => memory.service.write(alice, { ...revised, operationId, change: update })));
+    assert.equal(results.filter((result) => result.status === "updated").length, 1);
+    assert.ok(results.some((result) => result.status === "rejected" && result.code === "VERSION_CONFLICT"));
+    assert.deepEqual(await memory.service.write(alice, { ...input, change: { action: "save", content: "不同内容" } }), { status: "rejected", code: "OPERATION_CONFLICT" });
+    const forgotten = await memory.service.write(alice, { threadId: "t3", messageId: "m3", sourceText: "删除部署记忆", evidenceQuote: "删除部署记忆", operationId: "forget",
+      change: { action: "forget", id: saved.id, expectedVersion: 2 } });
+    assert.equal(forgotten.status, "forgotten");
+    assert.deepEqual(await memory.service.list(alice), []);
+    const tombstone = await pool.query("SELECT content, deleted, version FROM public.support_memories WHERE scope=$1 AND id=$2", [memoryScope(alice), saved.id]);
+    assert.deepEqual(tombstone.rows[0], { content: "", deleted: true, version: 3 });
+  } finally {
+    try {
+      for (const context of [alice, bob]) {
+        await pool.query("DELETE FROM public.support_memory_operations WHERE scope=$1", [memoryScope(context)]);
+        await pool.query("DELETE FROM public.support_memories WHERE scope=$1", [memoryScope(context)]);
+      }
+    } finally { await memory.close(); await pool.end(); }
+  }
+});
+
+test("真实 PostgreSQL：长期记忆注入容量有界，超限拒绝而不是静默覆盖旧记录", { timeout: 30_000 }, async () => {
+  const memory = await createMemory();
+  const pool = createDatabasePool();
+  const context = localSupportContext(`integration-memory-${randomUUID()}`);
+  try {
+    for (let i = 0; i < 8; i++) {
+      const content = `${i}:` + "x".repeat(988);
+      const result = await memory.service.write(context, { change: { action: "save", content }, operationId: `op-${i}`, threadId: "t", messageId: `m-${i}`, sourceText: content, evidenceQuote: content });
+      assert.equal(result.status, "saved");
+    }
+    const content = "新约束".repeat(100);
+    const rejected = await memory.service.write(context, { change: { action: "save", content }, operationId: "over", threadId: "t", messageId: "m", sourceText: content, evidenceQuote: content });
+    assert.deepEqual(rejected, { status: "rejected", code: "CAPACITY" });
+    assert.equal((await memory.service.list(context)).length, 8);
+  } finally {
+    try {
+      await pool.query("DELETE FROM public.support_memory_operations WHERE scope=$1", [memoryScope(context)]);
+      await pool.query("DELETE FROM public.support_memories WHERE scope=$1", [memoryScope(context)]);
+    } finally { await memory.close(); await pool.end(); }
+  }
+});
 
 for (const kind of ["model", "tool"]) {
   test(`真实 PostgreSQL：${kind} 会话预算跨进程保留且超限不执行`, { timeout: 60_000 }, async () => {

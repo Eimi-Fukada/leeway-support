@@ -1,6 +1,6 @@
 # Leeway Support
 
-逐步建设的智能客服系统，当前支持无工具 Agent 的多轮流式对话、PostgreSQL 会话 checkpoint、显式恢复与离线流程测试。
+逐步建设的智能客服系统，当前支持多轮流式对话、PostgreSQL checkpoint、身份上下文隔离、模型自主选择的长期记忆工具及离线流程测试。业务工具和 RAG 尚未接入。
 
 开发遵守 [小步迭代约定](AGENTS.md)，每项功能先说明解决的问题、主流实现方式和替代方案，再给出调用链与验证结果。[学习覆盖表](docs/learning-coverage.md) 连接本项目与 agent-practice 的已有实验及待补知识点，实验根目录按约定在两个候选路径中检查；[细粒度路线图](docs/agent-development-roadmap.md) 规定推进顺序。
 
@@ -21,16 +21,16 @@ pnpm install
 
 ```sh
 # 启动开发模式；修改源码会重启，已提交 checkpoint 保留，新启动默认创建新会话
-pnpm dev
+pnpm dev -- --user alice
 
 # 连续输入问题，每轮流式回答；/new 新会话，/exit 退出
-pnpm start
+pnpm start -- --user alice
 
 # 多轮对话时额外观察文本片段、节点更新和每轮最终结果
-pnpm start -- --debug
+pnpm start -- --user alice --debug
 
 # 重启后继续一个已完成会话，ID 使用此前打印的值
-pnpm start -- --thread <会话ID>
+pnpm start -- --user alice --thread <会话ID>
 
 # 使用 fakeModel 验证 Agent 流程，不需要模型配置、不发真实模型请求
 pnpm test
@@ -81,13 +81,15 @@ DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/agent-support
 
 index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始化官方 checkpoint 表并注入 Agent；退出时关闭 readline 和连接池。不配置学习专用数据库或 schema。数据库不会由程序创建。chat.ts 默认生成 thread_id；传 --thread 时先检查已保存状态，未知会话或有未完成步骤的会话明确拒绝，避免隐式创建或重试。恢复成功后仅提交新问题，由框架加载历史。/new 生成新 ID，不删除旧 checkpoint。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
 
-连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，连接池最多 5 个连接。setup 是官方建表/迁移；当前单实例启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；不自动重放整轮或回滚 checkpoint。主回答调用的有限重试不重复提交用户消息。数据库 checkpoint 仍是短期记忆，长期记忆未接入。
+连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，每个连接池最多 5 个连接；checkpoint 与长期记忆各有一个池。setup 是官方建表/迁移；当前启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；不自动重放整轮或回滚 checkpoint。主回答调用的有限重试不重复提交用户消息。数据库 checkpoint 仍是短期记忆，跨会话记忆由独立记忆表提供。
 
 当前是可信本地 CLI，知道会话 ID 不代表在未来多用户服务中拥有权限；身份校验、并发/运行所有权、历史保留/删除、备份恢复和未完成会话的安全续跑仍待设计。见 [PostgreSQL 迭代记录](docs/iterations/postgres-checkpoint.md)。
 
 ## 执行过程观察
 
-`pnpm start` / `pnpm dev` 使用同一个 index.ts 入口，每轮通过 `runSupportAgent` 调用主 Agent 的 `stream`。默认连续输出文本片段；执行 `pnpm start -- --debug`（开发模式为 `pnpm dev -- --debug`）额外展示片段所属节点、节点更新和最终回答。参数由 pnpm 传到应用，index.ts 读取 `--debug` 切换展示。需要模型服务支持流式响应。交互入口直接启动应用，以保留 stdin 和逐片段 stdout；Turbo 继续运行 test/typecheck。
+当前所有真实 CLI 启动命令需提供 `--user <开发用户ID>`。同一开发用户跨会话使用记忆；换用户隔离。仅声明 ID 不等于生产身份认证，真实业务接入须由验证过登录状态的服务端适配器提供 SupportContext。
+
+`pnpm start` / `pnpm dev` 使用同一个 index.ts 入口，每轮通过 `runSupportAgent` 调用主 Agent 的 `stream`。默认连续输出文本片段；执行 `pnpm start -- --user alice --debug`（开发模式为 `pnpm dev -- --user alice --debug`）额外展示片段所属节点、节点更新和最终回答。参数由 pnpm 传到应用，index.ts 读取 `--debug` 切换展示。需要模型服务支持流式响应。交互入口直接启动应用，以保留 stdin 和逐片段 stdout；Turbo 继续运行 test/typecheck。
 
 `src/agent/run.ts` 统一消费一次执行中的三类 streamMode；`src/cli/chat.ts` 集中终端参数、会话循环与普通/调试展示：
 
@@ -135,7 +137,7 @@ const SUMMARY_CONFIG = {
 
 压缩改变最新会话 messages，旧原文仍在此前的数据库 checkpoint，未删除旧表记录；跨进程恢复使用最新摘要状态。checkpoint 不是专门的聊天档案，未来清理历史时要另定原文保留政策。失败/未完成会话仍不自动重试。
 
-取舍、测试和供应商验证见 [摘要迭代记录](docs/iterations/conversation-summary.md)。启动方式仍是 `pnpm start -- --debug`。调低触发阈值可以检查触发行为，但会增加调用次数；不要把低阈值测试配置当成生产容量结论。
+取舍、测试和供应商验证见 [摘要迭代记录](docs/iterations/conversation-summary.md)。启动方式仍是 `pnpm start -- --user alice --debug`。调低触发阈值可以检查触发行为，但会增加调用次数；不要把低阈值测试配置当成生产容量结论。
 
 ## LangSmith 执行追踪
 
@@ -153,7 +155,7 @@ LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 
 endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工作区使用 AgentAddress：上述配置发送到 leeway-support → Local → Tracing；不要同时配置 LANGSMITH_PROJECT。老版 project 工作区仍可仅设置 LANGSMITH_PROJECT，缺省为 leeway-support-dev。云端是否收到需实际查看，启动提示不代表验收。Key 仅保存在服务端环境配置，不提交 Git。[官方 Agent 路由说明](https://docs.langchain.com/langsmith/log-traces-to-agent)（2026-10-23 核对）。
 
-运行 `pnpm start -- --debug` 并输入问题，每轮结束显示追踪 ID。每轮是独立 trace，模型调用为子 run；相同 thread_id 的多轮归入同一会话。普通模式展示保持简洁；追踪关闭（默认 false）时不创建上传 client/callback。生成关联 ID 本身不需要联网。
+运行 `pnpm start -- --user alice --debug` 并输入问题，每轮结束显示追踪 ID。每轮是独立 trace，模型调用为子 run；相同 thread_id 的多轮归入同一会话。普通模式展示保持简洁；追踪关闭（默认 false）时不创建上传 client/callback。生成关联 ID 本身不需要联网。
 
 调用链：index.ts 加载环境 → createTracing 创建官方 Client/LangChainTracer → withConfig 注入 callbacks → runSupportAgent 为每轮设置 runId/runName/thread metadata → 框架记录节点与模型 → 退出 finally 等待 callbacks 和 SDK 批次提交。
 
@@ -178,7 +180,7 @@ endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工�
 
 策略分别位于 `middleware/model-call-limit.ts` 与 `middleware/tool-call-limit.ts`；可在服务端创建 Agent 时通过第四参数覆盖，例如 `createSupportAgent(model, saver, {}, { model: { runLimit: 3, threadLimit: 30 } })`。只接受正整数且 threadLimit ≥ runLimit，不接受用户消息控制预算。
 
-正常完成后 run 计数重置，thread 计数进入 checkpoint，重启后继续累计；旧 checkpoint 缺少字段时从零开始，不回算历史调用。失败/超限不保证执行 afterAgent 清零，仍按既定规则拒绝自动恢复未完成会话。模型限制器不计内部重试 attempts、摘要调用和失败模型请求；工具限制器统计获准的 tool_calls，工具失败也可能已经占用预算。并行请求按调用个数检查，一批中任意调用超限时整批拒绝。当前生产 tools 仍为空，工具行为使用测试内无副作用 fixture 验证。
+正常完成后 run 计数重置，thread 计数进入 checkpoint，重启后继续累计；旧 checkpoint 缺少字段时从零开始，不回算历史调用。失败/超限不保证执行 afterAgent 清零，仍按既定规则拒绝自动恢复未完成会话。模型限制器不计内部重试 attempts、摘要调用和失败模型请求；工具限制器统计获准的 tool_calls，工具失败也可能已经占用预算。并行请求按调用个数检查，一批中任意调用超限时整批拒绝。当前生产 tools 为三项内部记忆工具，均计入预算；没有接入业务工具。
 
 这些是串行会话的循环上限，不是总费用账本、每用户配额或多实例原子限额；/new 会换 thread，不能用于防止用户绕过配额。完整取舍与验证见 [调用限制迭代](docs/iterations/call-limits.md)。
 
@@ -187,7 +189,23 @@ endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工�
 - 有限重试：主回答遇到指定暂时错误最多额外尝试 1 次，初始退避 300ms；归一化 retryAfterMs 最多等待 1 秒，HTTP Retry-After 超过 300ms 时不自动重试。认证、参数、额度耗尽、未知错误、超时与取消直接失败；首次失败已经耗时 5 秒以上也不再重试。
 - 运行保护：run.ts 为本轮建立独立输出进度与 callback；产生过任意模型片段（包括内部摘要）后不重试。绕过 runSupportAgent 直接 invoke/stream 时缺少进度保护，中间件保守地不重试。摘要内部调用不在主回答 wrapModelCall 内，仍不自动重试。SDK maxRetries 保持 0，整轮 Graph 截止时间 65 秒。
 
-正常使用仍为 `pnpm start` / `pnpm start -- --debug`，不增加独立运行模式。取舍、调用链与验证见 [中间件迭代记录](docs/iterations/middleware-retry-pii.md)。
+正常使用仍为 `pnpm start` / `pnpm start -- --user alice --debug`，不增加独立运行模式。取舍、调用链与验证见 [中间件迭代记录](docs/iterations/middleware-retry-pii.md)。
+
+## 身份上下文与长期记忆
+
+`src/support-context.ts` 定义 SupportContext：`identitySource`、`integrationId`、`productId`、`subject.kind/id`。运行通过 context 传递，不从用户消息或模型工具参数取得身份。校验器只校验结构，不做登录认证；local-development 与 business-authenticated 是隔离来源标记，后者必须由未来服务端认证适配器构造。
+
+CLI 使用 `--user alice` 构造 local-development/local-cli/support/alice。对外显示逻辑 thread ID，实际 checkpoint key 由身份归属哈希 + 逻辑 ID 组成；同一个逻辑 ID 在其他用户/产品/接入系统下无法读取原历史。`--thread` 也按同一上下文查找，找不到或未完成即拒绝，不把旧的无归属 checkpoint 自动认领给当前用户。
+
+主 Agent 自主判断稳定、跨会话有用的用户陈述，选择 `save_memory` / `update_memory` / `forget_memory`，不依赖“请记住”等触发词，也没有固定偏好字段。工具参数只有内容、依据引用及更新对象/版本；归属、来源消息 ID、thread 和操作 ID 由程序绑定。服务校验本轮原文引用、PII/已知凭据形态、内容长度；匿名上下文不读写个人记忆。模型判断是否值得记、是否为转述及语义冲突仍需评估，引用匹配不能证明内容真实。
+
+记忆存于产品库 public.support_memories，public.support_memory_operations 保存幂等结果；启动自动创建，退出关闭连接池。不用新数据库或演示 schema，也没有向量索引。每个身份范围最多 50 条有效记忆、内容合计 8000 字符、单条 1000 字符；超限明确拒绝，不悄悄覆盖旧记录。每次主模型调用临时注入该范围的有效记忆 JSON，不追加到 messages；这不是硬 Token 窗口保证。
+
+事务与 advisory lock 保护同一归属的写操作，操作 ID 重放返回原结果，相同 ID 不同内容拒绝，更新/遗忘要求 expectedVersion，冲突不覆盖。精确相同内容去重；语义近似去重依赖模型，尚无后台整合。遗忘清空当前记录内容并停用，后续不注入，但不删除旧 checkpoint/追踪；历史对话仍可能包含原陈述。记忆写入与 Graph 执行不是一个跨表原子事务，模型最终回答失败前已成功的记忆操作不会回滚。
+
+新逻辑 `thread` 可以使用同一用户的长期记忆；不同用户、产品、接入系统或身份来源隔离。读写故障明确失败，不伪装成“没有记忆”或“保存成功”。`messages` 流只投影 AI 文本，工具 JSON 结果不显示为客服正文；中间模型片段仍是临时输出，最终完成前不能当作已办结。
+
+机制、替代方案、存储选择与验收见 [SupportContext 与长期记忆迭代](docs/iterations/support-context-long-term-memory.md)。
 
 ## 离线流程测试
 
@@ -231,6 +249,13 @@ apps/agent/
       model.ts          创建并配置真实模型
       checkpoint.ts     PostgreSQL 连接池、官方 saver 与初始化
       tracing.ts        可选 LangSmith callback、上传脱敏与退出提交
+      database.ts       统一 PostgreSQL 配置与连接池策略
+      memory.ts         初始化应用记忆表与生命周期
+    support-context.ts  可信运行入参校验与身份范围隔离
+    memory/
+      agent.ts          记忆策略、工具及临时上下文注入
+      service.ts        来源/PII/身份校验与存储接口
+      postgres.ts       事务、版本与幂等的 PostgreSQL 实现
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
   tests/cli-debug.test.ts 调试展示的成功、失败、断流和输出范围测试
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
@@ -251,8 +276,8 @@ turbo.json               声明任务的缓存和运行方式
 应用内的调用链：
 
 ```text
-index.ts      → config/ 创建模型与 checkpointer → agent/agent.ts 创建 Agent → cli/chat.ts 管理会话
-每轮输入      → cli/chat.ts 展示事件 → agent/run.ts 执行 stream（新增消息 + thread_id）
+index.ts      → 本地 SupportContext + 模型/checkpointer/记忆服务 → Agent → chat
+每轮输入      → runSupportAgent（新增消息、身份 context、隔离 thread）→ 模型按需调用记忆工具
 agent.test.ts → fakeModel 控制响应或错误               → createSupportAgent(model) → invoke → 断言执行行为
 ```
 
@@ -260,7 +285,7 @@ agent.test.ts → fakeModel 控制响应或错误               → createSuppor
 
 根目录仅保留 index.ts。终端相关逻辑已合并；模型、数据库和追踪分别负责不同外部依赖，Agent 执行不依赖终端配置。无需通过 barrel/re-export 文件跳转，直接导入实际实现。历史迭代文档中的旧路径以当时版本为准，最新结构见本文和 [整理记录](docs/iterations/source-organization.md)。
 
-ChatOpenAI 负责模型通信，createAgent 负责执行流程，PostgresSaver 保存会话 checkpoint；离线测试仍使用 MemorySaver。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或长期记忆。
+ChatOpenAI 负责模型通信，createAgent 负责执行流程，PostgresSaver 保存会话 checkpoint；离线测试仍使用 MemorySaver。长期记忆由 MemoryService 和应用 PostgreSQL 表提供，生产 Agent 开放三项记忆工具。尚未手写 StateGraph，没有知识库或业务操作。
 
 pnpm 负责多包依赖和安装，并直接启动 dev/start 交互进程；Turbo 调度 test/typecheck。test 每次执行，typecheck 可复用缓存，只缓存检查结果，不生成编译产物。
 
@@ -269,7 +294,7 @@ TypeScript 负责类型检查，tsx 负责运行源码。本地模块导入使�
 也可以直接选择应用运行，效果与根 start 相同：
 
 ```sh
-pnpm --filter @leeway-support/agent start
+pnpm --filter @leeway-support/agent start -- --user alice
 ```
 
 当前只创建一个可运行应用。后续逐块讨论、实现工具调用和 Agent 流程，出现实际共享需求后再提取 packages。

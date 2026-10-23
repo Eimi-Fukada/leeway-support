@@ -2,7 +2,7 @@ import { createAgent } from "langchain";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 
-// 模型由入口传入：ChatOpenAI 和 fakeModel 都实现 BaseChatModel。
+// Agent 定义：模型由入口传入，ChatOpenAI 和 fakeModel 都实现 BaseChatModel。
 // 此模块不导入 model.ts，因此创建模拟 Agent 不会加载 .env 或校验真实凭证。
 export function createSupportAgent(model: BaseChatModel, checkpointer?: BaseCheckpointSaver) {
   // createAgent 基于 LangGraph 构建执行流程；这里先不手写 StateGraph。

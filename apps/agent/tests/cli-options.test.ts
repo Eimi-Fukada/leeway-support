@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseCliOptions } from "../src/cli-options.ts";
+import { parseCliOptions } from "../src/cli/chat.ts";
 
 test("解析新会话、恢复会话及 pnpm 参数分隔符", () => {
   assert.deepEqual(parseCliOptions([]), { debug: false, threadId: undefined });

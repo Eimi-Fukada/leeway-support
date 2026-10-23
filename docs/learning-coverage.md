@@ -100,6 +100,8 @@
 
 ## 下一小步
 
+源码组织已按 [整理记录](iterations/source-organization.md)收敛到 agent/、cli/、config/ 三类职责；当前路径以 README 为准。属于已有功能重组，不新增独立知识点或演示。
+
 现有基础已从 [共享流式执行](iterations/stream-main-path.md)、[多轮流式对话](iterations/multi-turn-chat.md) 推进到 [PostgreSQL checkpoint](iterations/postgres-checkpoint.md)：主入口支持数据库持久化和显式恢复已完成会话；未知或未完成会话拒绝自动恢复。后续优先讨论运行生命周期、分类错误/超时/取消或上下文预算，每轮只选择一个切片；长期记忆需求已确认，存储及读写契约仍待讨论。
 
 业务工具与身份契约在真实嵌入集成时推进；知识库/RAG 独立从证据与引用开始。长期记忆、中间件和子 Agent 按具体需求选择，不为学习数量提前装配。

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AIMessage, fakeModel } from "langchain";
-import { createSupportAgent } from "../src/agent.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
 
 // fakeModel 只控制模型这一外部依赖；每个用例都执行真实 Agent 流程。
 // 这里的消息是测试数据，不是客服的问答规则；本文件不导入真实模型配置。

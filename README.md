@@ -89,7 +89,7 @@ index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始�
 
 `pnpm start` / `pnpm dev` 使用同一个 index.ts 入口，每轮通过 `runSupportAgent` 调用主 Agent 的 `stream`。默认连续输出文本片段；执行 `pnpm start -- --debug`（开发模式为 `pnpm dev -- --debug`）额外展示片段所属节点、节点更新和最终回答。参数由 pnpm 传到应用，index.ts 读取 `--debug` 切换展示。需要模型服务支持流式响应。交互入口直接启动应用，以保留 stdin 和逐片段 stdout；Turbo 继续运行 test/typecheck。
 
-`src/run.ts` 统一消费一次执行中的三类 streamMode；`src/cli-run.ts` 控制普通/调试展示：
+`src/agent/run.ts` 统一消费一次执行中的三类 streamMode；`src/cli/chat.ts` 集中终端参数、会话循环与普通/调试展示：
 
 | 模式 | 用途 | 实际打印 |
 | --- | --- | --- |
@@ -138,15 +138,17 @@ index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始�
 
 ```text
 apps/agent/
-  src/index.ts           应用执行入口
-  src/chat.ts            连续输入、会话 ID、/new 和 /exit
-  src/model.ts           定义 createModel，调用时加载配置并创建真实模型
-  src/env.ts             加载应用环境，模型/数据库共用
-  src/checkpoint.ts      PostgreSQL 连接池、官方 saver 与初始化
-  src/cli-options.ts     解析 --debug / --thread 参数
-  src/agent.ts           Agent 工厂，接收模型与可选 checkpointer
-  src/run.ts             单次 stream 执行、事件投影与最终结果校验
-  src/cli-run.ts         普通连续文本 / 调试事件两种终端展示
+  src/
+    index.ts            应用启动、依赖装配与退出清理
+    agent/
+      agent.ts          Agent 定义，接收模型与 checkpointer
+      run.ts            单轮 stream 执行、事件投影与最终结果校验
+    cli/
+      chat.ts           启动参数、会话恢复、输入循环与终端展示
+    config/
+      env.ts            加载应用环境，路径固定为 apps/agent/.env
+      model.ts          创建并配置真实模型
+      checkpoint.ts     PostgreSQL 连接池、官方 saver 与初始化
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
   tests/cli-debug.test.ts 调试展示的成功、失败、断流和输出范围测试
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
@@ -167,12 +169,14 @@ turbo.json               声明任务的缓存和运行方式
 应用内的调用链：
 
 ```text
-index.ts      → createModel() / createCheckpointer() → createSupportAgent(model, PostgresSaver) → chat（thread_id）
-每轮输入      → runSupportCli（按 --debug 选择展示）→ runSupportAgent → stream（新增消息 + thread_id）
+index.ts      → config/ 创建模型与 checkpointer → agent/agent.ts 创建 Agent → cli/chat.ts 管理会话
+每轮输入      → cli/chat.ts 展示事件 → agent/run.ts 执行 stream（新增消息 + thread_id）
 agent.test.ts → fakeModel 控制响应或错误               → createSupportAgent(model) → invoke → 断言执行行为
 ```
 
 以上路径共用 agent.ts 中的定义；正常和调试展示使用同一应用入口和执行层。工厂每次调用创建一个 Agent 实例；依赖注入在这里就是把模型作为函数参数传入，没有额外容器。
+
+当前源码共七个文件，根目录仅保留 index.ts。终端相关的三个小文件已合并；模型和数据库仍分别负责不同依赖，Agent 执行不依赖终端配置。无需通过 barrel/re-export 文件跳转，直接导入实际实现。历史迭代文档中的旧路径以当时版本为准，最新结构见本文和 [整理记录](docs/iterations/source-organization.md)。
 
 ChatOpenAI 负责模型通信，createAgent 负责执行流程，PostgresSaver 保存会话 checkpoint；离线测试仍使用 MemorySaver。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或长期记忆。
 

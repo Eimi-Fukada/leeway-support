@@ -5,8 +5,8 @@ import { FakeBuiltModel } from "@langchain/core/testing";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import { createSupportAgent } from "../src/agent.ts";
-import { runSupportCli } from "../src/cli-run.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
+import { runSupportCli } from "../src/cli/chat.ts";
 
 test("一次流式执行观察文本和节点，只在正常结束后报告最终回答", async () => {
   const model = fakeModel().respond(new AIMessage({

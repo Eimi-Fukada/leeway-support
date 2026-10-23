@@ -5,7 +5,7 @@ export type SupportRunEvent =
   | { type: "text"; text: string; node: string }
   | { type: "node-update"; node: string };
 
-// 执行层不打印日志，最终结果来自同一次流。
+// Agent 执行：不依赖终端展示，最终结果来自同一次流。
 export async function runSupportAgent(
   agent: ReturnType<typeof createSupportAgent>,
   question: string,

@@ -11,7 +11,7 @@ function required(name: string): string {
 
 // 静态 import 只加载定义；调用此函数时才读取配置、校验并创建真实模型。
 export function createModel(): ChatOpenAI {
-  // 相对当前模块定位 apps/agent/.env，不依赖从哪个目录启动。
+  // 由同目录 env.ts 定位 apps/agent/.env，不依赖从哪个目录启动。
   // 部署时可以直接注入环境变量；Node 不会用文件覆盖已有变量。
   loadAgentEnv();
 

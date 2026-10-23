@@ -4,10 +4,10 @@ import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { createCheckpointer } from "../src/checkpoint.ts";
+import { createCheckpointer } from "../src/config/checkpoint.ts";
 import { AIMessage, fakeModel } from "langchain";
-import { createSupportAgent } from "../src/agent.ts";
-import { runSupportCli } from "../src/cli-run.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
+import { runSupportCli } from "../src/cli/chat.ts";
 
 const exec = promisify(execFile);
 

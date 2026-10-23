@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { AIMessage, fakeModel } from "langchain";
-import { createCheckpointer } from "../../src/checkpoint.ts";
-import { createSupportAgent } from "../../src/agent.ts";
-import { chat } from "../../src/chat.ts";
+import { createCheckpointer } from "../../src/config/checkpoint.ts";
+import { createSupportAgent } from "../../src/agent/agent.ts";
+import { chat } from "../../src/cli/chat.ts";
 
 async function main() {
   const [phase, threadId] = process.argv.slice(2);

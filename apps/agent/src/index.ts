@@ -1,9 +1,8 @@
-import { createSupportAgent } from "./agent.ts";
-import { createModel } from "./model.ts";
+import { createSupportAgent } from "./agent/agent.ts";
+import { createModel } from "./config/model.ts";
 import { createInterface } from "node:readline";
-import { chat } from "./chat.ts";
-import { createCheckpointer } from "./checkpoint.ts";
-import { parseCliOptions } from "./cli-options.ts";
+import { chat, parseCliOptions } from "./cli/chat.ts";
+import { createCheckpointer } from "./config/checkpoint.ts";
 
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));

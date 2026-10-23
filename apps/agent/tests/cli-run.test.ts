@@ -5,8 +5,8 @@ import { FakeBuiltModel } from "@langchain/core/testing";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import { createSupportAgent } from "../src/agent.ts";
-import { runSupportCli } from "../src/cli-run.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
+import { runSupportCli } from "../src/cli/chat.ts";
 
 // 控制真正的模型流边界，证明主路径在模型结束前已经展示片段。
 class StreamingModel extends FakeBuiltModel {

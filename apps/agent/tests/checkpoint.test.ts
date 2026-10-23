@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCheckpointer } from "../src/checkpoint.ts";
+import { createCheckpointer } from "../src/config/checkpoint.ts";
 
 test("无效的数据库配置在连接前拒绝，错误不回显输入", async () => {
   for (const value of ["", "invalid-secret", "https://user:secret@localhost/db", "postgresql://localhost/"]) {

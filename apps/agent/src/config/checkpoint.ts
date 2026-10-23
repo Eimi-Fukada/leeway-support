@@ -2,6 +2,7 @@ import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import pg from "pg";
 import { loadAgentEnv } from "./env.ts";
 
+// 数据库配置与连接生命周期集中于此；Agent 仅接收创建好的 saver。
 export async function createCheckpointer(connectionString?: string): Promise<PostgresSaver> {
   if (connectionString === undefined) {
     loadAgentEnv();

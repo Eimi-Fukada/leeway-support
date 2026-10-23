@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { Readable } from "node:stream";
 import { AIMessage, fakeModel } from "langchain";
 import { MemorySaver } from "@langchain/langgraph";
-import { createSupportAgent } from "../src/agent.ts";
-import { chat } from "../src/chat.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
+import { chat } from "../src/cli/chat.ts";
 
 test("多轮输入串行运行，新会话隔离，命令及空行不调用模型，exit 后不再提交", async () => {
   const model = fakeModel()

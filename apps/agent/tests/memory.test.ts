@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { AIMessage, fakeModel } from "langchain";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseMessage } from "@langchain/core/messages";
-import { createSupportAgent } from "../src/agent.ts";
-import { runSupportAgent } from "../src/run.ts";
+import { createSupportAgent } from "../src/agent/agent.ts";
+import { runSupportAgent } from "../src/agent/run.ts";
 
 test("同一 thread 只提交新增消息，后续模型收到完整历史且其他 thread 隔离", async () => {
   const model = fakeModel()

@@ -35,7 +35,7 @@ test("模型错误向上传播，观察输出不泄露原始错误且不报告�
 
   await assert.rejects(
     runSupportCli(createSupportAgent(model), "测试失败", (text) => lines.push(text.trimEnd()), true),
-    (error: unknown) => error === failure,
+    (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)),
   );
 
   assert.equal(model.calls.length, 1);
@@ -71,7 +71,7 @@ test("已有文本片段但随后断流时，不将半成品作为最终结果",
 
   await assert.rejects(
     runSupportCli(createSupportAgent(new InterruptedModel()), "测试断流", (text) => lines.push(text.trimEnd()), true),
-    (error: unknown) => error === failure,
+    (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)),
   );
 
   assert.ok(lines.some((line) => line.startsWith("[文本片段]")));

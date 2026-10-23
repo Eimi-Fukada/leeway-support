@@ -58,7 +58,7 @@ test("模型失败时流程拒绝完成，不将异常转换成成功回答", as
 
   await assert.rejects(
     agent.invoke({ messages: [{ role: "user", content: "触发失败场景" }] }),
-    (error: unknown) => error === failure,
+    (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)),
   );
   assert.equal(model.calls.length, 1);
 });

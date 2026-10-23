@@ -38,6 +38,28 @@ async function receiver(status = 200, infoDelayMs = 0) {
   };
 }
 
+test("PII 输入与模型自行生成的联系方式在追踪上传前均被脱敏", async () => {
+  const sink = await receiver();
+  const tracing = createTracing({
+    LANGSMITH_TRACING: "true", LANGSMITH_API_KEY: "pii-local-test-key", LANGSMITH_ENDPOINT: sink.endpoint,
+  });
+  try {
+    const model = fakeModel().respond(new AIMessage("模型生成 contact@example.com，13800138000"));
+    const agent = createSupportAgent(model).withConfig({ callbacks: tracing.callbacks });
+    const result = await runSupportAgent(agent, "邮箱 user@example.com");
+    // 这是追踪边界，不修改流正文；输出 PII 防护是独立需求。
+    assert.match(result.answer, /contact@example.com/);
+    await tracing.flush();
+    const body = JSON.stringify(sink.batches);
+    assert.match(body, /REDACTED_EMAIL/);
+    assert.match(body, /REDACTED_CN_PHONE/);
+    assert.doesNotMatch(body, /user@example\.com|contact@example\.com|13800138000/);
+  } finally {
+    await tracing.flush();
+    await sink.close();
+  }
+});
+
 test("追踪关闭时不创建 callback 或发出上传请求", async () => {
   let requests = 0;
   const tracing = createTracing({ LANGSMITH_TRACING: "false" }, async () => {
@@ -109,7 +131,7 @@ test("可隐藏输入输出，失败仍被记录且原始错误中的已知凭�
   const failure = new Error(`模型错误 ${secret}`);
   try {
     const agent = createSupportAgent(fakeModel().respond(failure)).withConfig({ callbacks: tracing.callbacks });
-    await assert.rejects(runSupportAgent(agent, "不应上传的问句"), (error: unknown) => error === failure);
+    await assert.rejects(runSupportAgent(agent, "不应上传的问句"), (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)));
     await tracing.flush();
     const body = JSON.stringify(sink.batches);
     assert.ok(body.includes("模型错误"));

@@ -65,7 +65,7 @@ test("正常客服入口断流后拒绝返回成功，不输出敏感错误", as
 
   await assert.rejects(
     runSupportCli(createSupportAgent(model), "测试", (text) => output.push(text)),
-    (error: unknown) => error === failure,
+    (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)),
   );
   assert.equal(model.attempts, 1);
   assert.match(output.join(""), /^\[客服\] 你好\n\[失败\]/);

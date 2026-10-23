@@ -42,6 +42,6 @@ export function createModel(): ChatOpenAI {
     configuration: { baseURL },
     useResponsesApi: apiMode === "responses",
     timeout: 60_000,
-    maxRetries: 0, // 学习阶段一次调用一次尝试，失败立即反馈，便于定位。
+    maxRetries: 0, // SDK 不重试；主回答的有限重试由 Agent 中间件唯一管理，摘要仍不重试。
   });
 }

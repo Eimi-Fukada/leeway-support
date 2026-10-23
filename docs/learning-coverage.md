@@ -20,8 +20,8 @@
 | 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`、`记忆与持久化说明.md`；`labs/persistent-memory/` 仅保留产品实践说明 | C2 及 C4 持久化部分已进入主路径：产品数据库 public 中的 PostgreSQL checkpoint、同 thread 历史、--thread 恢复已完成会话；产品跨进程测试已验证。多用户归属鉴权/安全续跑未实现 |
 | 长期记忆 C5–C7 | 已补 `记忆与持久化说明.md`；后续在产品具体场景中补实现、说明与测试 | 已确认需要；首个记忆场景、读写契约与存储方式待讨论，尚未实现。跨会话偏好、来源、删除、冲突；接数据库不自动构成长期记忆，不能把实时业务事实永久记住 |
 | 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | C8 已加入产品：官方摘要 + 应用失败校验、内部文本过滤与代码集中配置预算（不使用环境变量）；旧原文保留历史 checkpoint，摘要状态可跨进程恢复。C9 工具输出清理未实现，模型窗口/摘要保真仍待校准 |
-| Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；待补可信身份和执行侧鉴权实验 | 顺序可观测；并行调用也计数；不把隐藏工具当成授权 |
-| 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；待补模型/工具分类重试实验 | 控制重试放大；部分流输出后的失败；未知写入结果先核对 |
+| Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；可信身份和执行侧鉴权未实现 | D3/D4 已装配主 Agent，明确模型步骤/工具准入计数、每轮清零与 checkpoint 跨进程累计、超限报错、并行批次整批拒绝，见 [迭代记录](iterations/call-limits.md)。不是费用账本/多用户配额；生产工具列表仍空 |
+| 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；模型分类重试通过产品故障注入测试学习 | D7 主回答有限重试、片段后不重试；D9 输入侧邮箱/银行卡/大陆手机号在 Graph 前脱敏、历史在摘要前清理、追踪上传脱敏已落地，见 [迭代记录](iterations/middleware-retry-pii.md)。输出防泄漏、全 PII 治理、工具重试和降级未实现 |
 | 工具发现 D11–D12 | `llm-tool-selector-middleware.ts`、`provider-tool-search-middleware.ts` | 大工具集是否值得预筛；比较成本、漏选与提供商限制 |
 | 模拟、规划、文件 D13–D15 | `tool-emulator-middleware.ts`、`todo-list-middleware.ts`、`filesystem-middleware.ts` | 区分模拟证据、计划和完成事实；文件能力只在受控实验/运行环境使用 |
 | 流式消息、界面与嵌入 E | `apps/support-chat/basic-chat/`、`generative-ui/`、`ai-elements/`、`apps/copilotkit-demo/` | 文本/状态/工具事件分开；宿主上下文和白名单页面动作；后端负责业务授权 |

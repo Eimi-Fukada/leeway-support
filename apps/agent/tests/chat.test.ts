@@ -33,7 +33,7 @@ test("失败后退出输入循环，后续行不再提交；debug 仍走相同�
   const output: string[] = [];
   await assert.rejects(chat(createSupportAgent(model, new MemorySaver()),
     Readable.from(["失败请求", "不应处理"]), (text) => output.push(text), true),
-    (error: unknown) => error === failure);
+    (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)));
   assert.equal(model.calls.length, 1);
   assert.match(output.join(""), /\[开始\]/);
   assert.match(output.join(""), /\[失败\]/);

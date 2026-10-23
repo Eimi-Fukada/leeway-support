@@ -1,6 +1,7 @@
 import { countTokensApproximately, summarizationMiddleware } from "langchain";
 import { BaseMessage } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { redactMessages } from "./pii.ts";
 
 const MAX_HISTORY_TOKENS = 16_000;
 // 中间件策略集中在代码中维护；不从环境变量读取。
@@ -50,7 +51,7 @@ export function createSummaryMiddleware(model: BaseChatModel, options: SummaryOp
       if (beforeTokens > MAX_HISTORY_TOKENS) {
         throw new Error("摘要失败：历史超过本轮安全处理上限，请新建会话或缩短输入；原历史未压缩。");
       }
-      const update = await hook(state, runtime);
+      const update = await hook({ ...state, messages: redactMessages(state.messages) }, runtime);
       if (!update || !Array.isArray(update.messages)) return update;
       const messages = update.messages.filter((message): message is BaseMessage => BaseMessage.isInstance(message));
       const summary = messages.find((message) => message.additional_kwargs.lc_source === "summarization");

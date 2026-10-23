@@ -75,13 +75,13 @@ DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/agent-support
 [会话结束]
 ```
 
-每条非空问题会请求模型并产生相应费用；空行、/new、/exit 和未知命令不调用模型。同一会话逐轮串行执行，后续轮次由 checkpoint 加载历史，每轮仅提交新增用户消息。自动重试已关闭，单次模型请求超时为 60 秒。开发模式重启后重新等待输入，恢复历史需传原会话 ID。配置缺失或接口模式不合法会在请求前报错；调用失败停止输入循环，以非零状态退出，不输出原始请求、密钥或供应商错误内容。
+每条非空问题会请求模型并产生相应费用；空行、/new、/exit 和未知命令不调用模型。同一会话逐轮串行执行，后续轮次由 checkpoint 加载历史，每轮仅提交新增用户消息。SDK 重试关闭，主回答由中间件进行有限分类重试；单次模型请求超时为 60 秒，整轮 Graph 截止时间为 65 秒。开发模式重启后重新等待输入，恢复历史需传原会话 ID。配置缺失或接口模式不合法会在请求前报错；调用失败停止输入循环，以非零状态退出，不输出原始请求、密钥或供应商错误内容。
 
 ## 会话与短期记忆
 
 index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始化官方 checkpoint 表并注入 Agent；退出时关闭 readline 和连接池。不配置学习专用数据库或 schema。数据库不会由程序创建。chat.ts 默认生成 thread_id；传 --thread 时先检查已保存状态，未知会话或有未完成步骤的会话明确拒绝，避免隐式创建或重试。恢复成功后仅提交新问题，由框架加载历史。/new 生成新 ID，不删除旧 checkpoint。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
 
-连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，连接池最多 5 个连接。setup 是官方建表/迁移；当前单实例启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；本轮不自动重试或回滚。数据库 checkpoint 仍是短期记忆，长期记忆未接入。
+连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，连接池最多 5 个连接。setup 是官方建表/迁移；当前单实例启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；不自动重放整轮或回滚 checkpoint。主回答调用的有限重试不重复提交用户消息。数据库 checkpoint 仍是短期记忆，长期记忆未接入。
 
 当前是可信本地 CLI，知道会话 ID 不代表在未来多用户服务中拥有权限；身份校验、并发/运行所有权、历史保留/删除、备份恢复和未完成会话的安全续跑仍待设计。见 [PostgreSQL 迭代记录](docs/iterations/postgres-checkpoint.md)。
 
@@ -116,7 +116,7 @@ index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始�
 
 ## 会话摘要中间件
 
-Agent 已装配官方 `summarizationMiddleware`，在 `beforeModel` 阶段检查历史消息。默认超过近似 6000 Token 时压缩早期记录，保留最近 8 条消息（不是 8 轮）；短会话不增加摘要请求。策略直接写在 [summarization.ts](apps/agent/src/agent/summarization.ts) 的 `SUMMARY_CONFIG` 中，不使用环境变量：
+Agent 已装配官方 `summarizationMiddleware`，在 `beforeModel` 阶段检查历史消息。默认超过近似 6000 Token 时压缩早期记录，保留最近 8 条消息（不是 8 轮）；短会话不增加摘要请求。策略直接写在 [summarization.ts](apps/agent/src/agent/middleware/summarization.ts) 的 `SUMMARY_CONFIG` 中，不使用环境变量：
 
 ```ts
 const SUMMARY_CONFIG = {
@@ -157,13 +157,37 @@ endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工�
 
 调用链：index.ts 加载环境 → createTracing 创建官方 Client/LangChainTracer → withConfig 注入 callbacks → runSupportAgent 为每轮设置 runId/runName/thread metadata → 框架记录节点与模型 → 退出 finally 等待 callbacks 和 SDK 批次提交。
 
-上传前过滤已配置的模型 Key、LangSmith Key、数据库连接串，以及常见凭据字段。默认允许上传问答用于排查历史输入；这不是完整 PII 脱敏，真实客户数据上线前需要独立治理。可配置 `LANGSMITH_HIDE_INPUTS=true`、`LANGSMITH_HIDE_OUTPUTS=true` 隐藏相应字段；不改变实际模型请求或 PostgreSQL checkpoint。错误记录会过滤已知凭据，不能把用户任意提交的敏感信息当作已全部识别。
+上传前过滤已配置的模型 Key、LangSmith Key、数据库连接串，以及常见凭据字段；同时应用邮箱、银行卡号和大陆手机号的 PII 规则。默认允许上传处理后的问答用于排查历史输入；这不是完整 PII 脱敏，真实客户数据上线前需要独立治理。可配置 `LANGSMITH_HIDE_INPUTS=true`、`LANGSMITH_HIDE_OUTPUTS=true` 隐藏相应字段；追踪层处理不改变实际模型输出或 PostgreSQL checkpoint。错误记录会过滤已知凭据，不能把用户任意提交的敏感信息当作已全部识别。
 
 上传请求默认限制 10 秒，可通过 `LANGSMITH_TIMEOUT_MS` 配置（100–60000 毫秒）；不开自动上传重试，追踪缓冲最多 5 MiB、提交并发 1。上传不可用时区分 HTTP 401/403/429、网络连接与超时，提示追踪可能缺失，主流程结果不因上传错误改变；启用却缺 Key 或 endpoint 非法时启动前明确报错。当前 Key 已能确定工作区，不配置 Workspace ID；未来确有跨工作区需求再单独设计。退出提交是尽力而为，不保证进程被强杀后仍保存追踪。运行日志、数据库审计、超时/取消/重试和执行预算仍由应用逐步建设，不能由追踪平台代替。
 
 `pnpm test` 与 `pnpm test:postgres` 在预加载阶段关闭自动云追踪；tracing.test.ts 显式使用本地 HTTP 接收端 + fakeModel 验证，不需要真实 LangSmith Key。模型 usage 若缺失则无法凭空计算 Token；中转服务价格需单独配置和验证，界面估算不等于真实账单。
 
 依据：[LangChain 追踪](https://docs.langchain.com/langsmith/trace-with-langchain)、[会话关联](https://docs.langchain.com/langsmith/threads)、[敏感字段处理](https://docs.langchain.com/langsmith/mask-inputs-outputs)。取舍与验收见 [追踪迭代记录](docs/iterations/langsmith-tracing.md)。
+
+## 中间件装配与输入 PII
+
+`agent/agent.ts` 显式装配 `模型调用限制 → PII → 摘要 → 主模型重试 → 工具调用限制`，各实现放在 `agent/middleware/`，不自动扫描。数组顺序不等于所有 hook 都同方向执行：模型限制在 beforeModel 先检查，工具限制在 afterModel、工具执行前检查。数据库与追踪配置继续放在 config。
+
+默认循环预算如下，均采用 `exitBehavior: "error"`，超限停止，不注入成功回答：
+
+| 限制 | 每轮 run | 同一 thread 跨轮 |
+| --- | --- | --- |
+| 主模型步骤 | 6 | 60 |
+| 全部工具共享 | 4 | 40 |
+
+策略分别位于 `middleware/model-call-limit.ts` 与 `middleware/tool-call-limit.ts`；可在服务端创建 Agent 时通过第四参数覆盖，例如 `createSupportAgent(model, saver, {}, { model: { runLimit: 3, threadLimit: 30 } })`。只接受正整数且 threadLimit ≥ runLimit，不接受用户消息控制预算。
+
+正常完成后 run 计数重置，thread 计数进入 checkpoint，重启后继续累计；旧 checkpoint 缺少字段时从零开始，不回算历史调用。失败/超限不保证执行 afterAgent 清零，仍按既定规则拒绝自动恢复未完成会话。模型限制器不计内部重试 attempts、摘要调用和失败模型请求；工具限制器统计获准的 tool_calls，工具失败也可能已经占用预算。并行请求按调用个数检查，一批中任意调用超限时整批拒绝。当前生产 tools 仍为空，工具行为使用测试内无副作用 fixture 验证。
+
+这些是串行会话的循环上限，不是总费用账本、每用户配额或多实例原子限额；/new 会换 thread，不能用于防止用户绕过配额。完整取舍与验证见 [调用限制迭代](docs/iterations/call-limits.md)。
+
+- 输入侧 PII：邮箱、通过 Luhn 校验的银行卡号、大陆连续 11 位手机号（支持 +86/86 前缀）替换为 `[REDACTED_类型]`。run.ts 在提交 Graph 前处理新问题，避免原文进入新输入 checkpoint 和根 trace；beforeModel 在摘要前清理历史文本，复用官方检测/替换函数，扩展了官方 piiMiddleware 只扫描最近用户输入的范围。旧 checkpoint 不删除，多模态、姓名、地址、身份证号和分隔手机号尚未覆盖。
+- 输出边界：没有启用“输出已安全”的保证。模型自行生成的 PII 仍可能进入终端流和输出 checkpoint；afterModel 处理太晚，不能阻止已发片段。追踪上传单独执行上述脱敏规则。不要把该能力当作全链路 PII 治理。
+- 有限重试：主回答遇到指定暂时错误最多额外尝试 1 次，初始退避 300ms；归一化 retryAfterMs 最多等待 1 秒，HTTP Retry-After 超过 300ms 时不自动重试。认证、参数、额度耗尽、未知错误、超时与取消直接失败；首次失败已经耗时 5 秒以上也不再重试。
+- 运行保护：run.ts 为本轮建立独立输出进度与 callback；产生过任意模型片段（包括内部摘要）后不重试。绕过 runSupportAgent 直接 invoke/stream 时缺少进度保护，中间件保守地不重试。摘要内部调用不在主回答 wrapModelCall 内，仍不自动重试。SDK maxRetries 保持 0，整轮 Graph 截止时间 65 秒。
+
+正常使用仍为 `pnpm start` / `pnpm start -- --debug`，不增加独立运行模式。取舍、调用链与验证见 [中间件迭代记录](docs/iterations/middleware-retry-pii.md)。
 
 ## 离线流程测试
 
@@ -194,7 +218,12 @@ apps/agent/
     agent/
       agent.ts          Agent 定义，接收模型与 checkpointer
       run.ts            单轮 stream 执行、事件投影与最终结果校验
-      summarization.ts  摘要预算、官方中间件及失败保护
+      middleware/
+        summarization.ts 摘要预算、官方中间件及失败保护
+        model-retry.ts   有限重试、暂时错误分类和输出进度保护
+        pii.ts           文本 PII 规则、提交前与历史清理
+        model-call-limit.ts 主模型每轮/会话步骤上限
+        tool-call-limit.ts 全工具共享的每轮/会话调用上限
     cli/
       chat.ts           启动参数、会话恢复、输入循环与终端展示
     config/

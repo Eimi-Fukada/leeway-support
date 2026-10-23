@@ -4,7 +4,7 @@ import { AIMessage, HumanMessage, countTokensApproximately, fakeModel } from "la
 import { MemorySaver } from "@langchain/langgraph";
 import { createSupportAgent } from "../src/agent/agent.ts";
 import { runSupportAgent } from "../src/agent/run.ts";
-import { createSummaryMiddleware } from "../src/agent/summarization.ts";
+import { createSummaryMiddleware } from "../src/agent/middleware/summarization.ts";
 
 const first = "用户明确使用 Windows 桌面版。" + "背景说明。".repeat(80);
 const second = "用户已尝试重启。" + "问题描述。".repeat(80);

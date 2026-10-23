@@ -8,8 +8,52 @@ import { createCheckpointer } from "../src/config/checkpoint.ts";
 import { AIMessage, fakeModel } from "langchain";
 import { createSupportAgent } from "../src/agent/agent.ts";
 import { runSupportCli } from "../src/cli/chat.ts";
+import { runSupportAgent } from "../src/agent/run.ts";
 
 const exec = promisify(execFile);
+
+for (const kind of ["model", "tool"]) {
+  test(`真实 PostgreSQL：${kind} 会话预算跨进程保留且超限不执行`, { timeout: 60_000 }, async () => {
+    const saver = await createCheckpointer();
+    const threadId = `integration-limits-${kind}-${randomUUID()}`;
+    const cwd = fileURLToPath(new URL("../", import.meta.url));
+    try {
+      for (const phase of ["seed", "check"]) {
+        const { stdout } = await exec(process.execPath, ["--import", "tsx", "--import", "./tests/setup.ts", "tests/fixtures/limits-worker.ts", kind, phase, threadId], { cwd, timeout: 25_000 });
+        assert.match(stdout, /limits-worker-ok/);
+      }
+    } finally {
+      try { await saver.deleteThread(threadId); }
+      finally { await saver.end(); }
+    }
+  });
+}
+
+test("真实 PostgreSQL：PII 在首个输入 checkpoint 前脱敏，重试不重复提交用户消息", { timeout: 25_000 }, async () => {
+  const saver = await createCheckpointer();
+  const threadId = `integration-pii-${randomUUID()}`;
+  const model = fakeModel().respond(Object.assign(new Error("临时服务错误"), { status: 503 }))
+    .respond((messages) => {
+      assert.equal(messages.at(-1)?.text, "联系 [REDACTED_EMAIL] [REDACTED_CN_PHONE]");
+      return new AIMessage("请说明问题");
+    });
+  try {
+    const agent = createSupportAgent(model, saver);
+    await runSupportAgent(agent, "联系 user@example.com 13800138000", undefined, threadId);
+    let checkpoints = 0;
+    for await (const entry of saver.list({ configurable: { thread_id: threadId } })) {
+      checkpoints++;
+      assert.doesNotMatch(JSON.stringify(entry.checkpoint), /user@example\.com|13800138000/);
+    }
+    assert.ok(checkpoints > 0);
+    const latest = await agent.graph.getState({ configurable: { thread_id: threadId } });
+    assert.deepEqual(latest.values.messages.map((m: { type: string }) => m.type), ["human", "ai"]);
+    assert.equal(model.calls.length, 2);
+  } finally {
+    try { await saver.deleteThread(threadId); }
+    finally { await saver.end(); }
+  }
+});
 
 test("真实 PostgreSQL：进程退出后新进程恢复已完成会话，不调用真实模型", { timeout: 60_000 }, async () => {
   const saver = await createCheckpointer();

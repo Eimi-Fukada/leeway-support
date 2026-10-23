@@ -35,8 +35,21 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
+  // beforeModel/afterModel 的预算错误可能被框架包装，沿 cause 查找稳定的错误类型。
+  let current = error;
+  const visited = new Set<unknown>();
+  while (current instanceof Error && !visited.has(current)) {
+    visited.add(current);
+    if (["ModelCallLimitMiddlewareError", "ToolCallLimitExceededError"].includes(current.name) ||
+      current.constructor.name === "ToolCallLimitExceededError") {
+      console.error("[agent] 已达到模型或工具调用上限，本轮未完成；不会继续执行，请检查会话预算。");
+      process.exitCode = 1;
+      return;
+    }
+    current = current.cause;
+  }
   // 不打印原始供应商错误、请求或堆栈，避免其中包含密钥、地址等敏感配置。
-  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回|数据库配置|数据库初始化|启动参数|会话恢复|追踪配置|摘要配置|摘要失败)/.test(error.message)) {
+  if (error instanceof Error && /^(缺少 |OPENAI_|模型未返回|数据库配置|数据库初始化|启动参数|会话恢复|追踪配置|摘要配置|摘要失败|调用预算配置)/.test(error.message)) {
     console.error("[agent]", error.message);
   } else {
     console.error("[agent] 执行失败，请检查模型服务或 PostgreSQL；本轮可能未保存完整结果，不会自动重试。");

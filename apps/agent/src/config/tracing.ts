@@ -1,6 +1,7 @@
 import { AgentAddress, Client } from "langsmith";
 import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
+import { redactPii } from "../agent/middleware/pii.ts";
 
 // 显式 Client + callback：配置、上传策略和关闭过程集中在这里，Agent 不依赖云服务。
 export function createTracing(
@@ -51,7 +52,7 @@ export function createTracing(
   // 这里只保护已知凭据/常见敏感字段，不声称能识别全部个人信息。
   function redact(value: unknown): unknown {
     if (typeof value === "string") {
-      let result = value;
+      let result = redactPii(value);
       for (const secret of secrets) result = result.replaceAll(secret, "[REDACTED]");
       return result
         .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[REDACTED_DATABASE_URL]")

@@ -52,7 +52,7 @@ test("失败轮可留下已提交的用户输入，但不能写入伪成功回�
   const saver = new MemorySaver();
   const agent = createSupportAgent(model, saver);
   await runSupportAgent(agent, "第一轮", undefined, "a");
-  await assert.rejects(runSupportAgent(agent, "失败轮", undefined, "a"), (error: unknown) => error === failure);
+  await assert.rejects(runSupportAgent(agent, "失败轮", undefined, "a"), (error: unknown) => (error === failure || (error instanceof Error && error.cause === failure)));
   const saved = await saver.getTuple({ configurable: { thread_id: "a" } });
   assert.ok(saved);
   const messages = saved.checkpoint.channel_values.messages as BaseMessage[];

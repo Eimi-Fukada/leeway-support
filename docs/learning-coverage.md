@@ -34,7 +34,7 @@
 | 宿主页面动作 / 业务事件 I7–I8 | CopilotKit 已有页面上下文/前端工具；待补 `labs/business-events/` | 页面跳转/填草稿、服务端业务命令、主动事件推送分别验证；重放、重复与乱序有定义 |
 | 正式 SDK I6 | 现有 UI 示例作输入；待补 `labs/embedded-sdk/` | 在独立宿主接入，验证公开协议、身份交换、事件/确认/重连和版本兼容 |
 | 运营报表 / DSL | `apps/support-chat/openui/` | 白名单组件和数据源；报表需求出现再装配，不与核心客服链路绑定 |
-| 观测、评估与运行 J | 各主题 `*.test.ts` 提供局部测试；待补 `labs/evaluation/` 与服务故障实验 | trace、调用预算、检索/答案/工具分别评估；发布回滚、数据删除和恢复有证据 |
+| 观测、评估与运行 J | 现有主题测试与模型配置供对照；LangSmith 治理由当前产品接入及 `tests/tracing.test.ts` 覆盖，不另建 demo | 已接可选 LangSmith Tracer、每轮 runId、会话关联、基础凭据过滤与退出提交；28 个本地回归用例通过。缺 Key，真实云接收未验收；调用预算、答案评估及外围故障记录仍待实现 |
 
 ## 记忆与持久化的概念边界
 
@@ -101,6 +101,12 @@
 ## 下一小步
 
 源码组织已按 [整理记录](iterations/source-organization.md)收敛到 agent/、cli/、config/ 三类职责；当前路径以 README 为准。属于已有功能重组，不新增独立知识点或演示。
+
+已补 [LangSmith 追踪](iterations/langsmith-tracing.md)，默认关闭，需填真实 Key 后验收云端接收；本地 callbacks/上传/错误隔离已验证。Agent 运行位置和 PostgreSQL checkpoint 均保持原有方式。
+
+2026-10-23 云端排障验收补充：有效 Key 不带 Workspace header 时读取返回 200，原非 UUID Workspace 配置导致 401。已清空错误的可选项，增加格式校验、HTTP 分类与可配置超时。实际上传诊断 trace 返回 202，并通过 Agent/local 地址解析后读回；证明当前云端路由可用，不代表已验证所有真实业务问答。
+
+同日配置精简：当前无需跨工作区指定目标，已彻底移除 Workspace ID 环境项及应用读取/校验；上段是排障过程，现有设置以 README 和 .env.example 为准。保留实际需要的追踪开关、Key、Agent/环境、endpoint、超时和数据隐藏选项。
 
 现有基础已从 [共享流式执行](iterations/stream-main-path.md)、[多轮流式对话](iterations/multi-turn-chat.md) 推进到 [PostgreSQL checkpoint](iterations/postgres-checkpoint.md)：主入口支持数据库持久化和显式恢复已完成会话；未知或未完成会话拒绝自动恢复。后续优先讨论运行生命周期、分类错误/超时/取消或上下文预算，每轮只选择一个切片；长期记忆需求已确认，存储及读写契约仍待讨论。
 

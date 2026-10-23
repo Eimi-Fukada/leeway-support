@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "test": "tsx --test tests/*.test.ts",
-    "test:postgres": "tsx --test tests/postgres.integration.ts",
+    "test": "tsx --import ./tests/setup.ts --test tests/*.test.ts",
+    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -21,6 +21,7 @@
     "@langchain/langgraph-checkpoint-postgres": "1.1.2",
     "@langchain/openai": "1.6.3",
     "langchain": "1.5.18",
+    "langsmith": "0.11.0",
     "pg": "8.23.1"
   }
 }

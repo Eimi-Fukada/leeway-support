@@ -81,7 +81,10 @@ export async function runSupportCli(
         write(`[节点更新] ${event.node}\n`);
       }
     }, threadId);
-    if (debug) write(`[最终回答] ${result.answer}\n`);
+    if (debug) {
+      write(`[追踪ID] ${result.runId}\n`);
+      write(`[最终回答] ${result.answer}\n`);
+    }
     else write("\n");
     write(`[完成] 耗时 ${result.elapsedMs} ms\n`);
     return result;

@@ -114,6 +114,34 @@ index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始�
 
 `stream` 的多模式接口适合直接观察 Graph 运行事件。[官方文档](https://docs.langchain.com/oss/javascript/langgraph/streaming)目前也推荐新应用评估 event streaming 的独立投影接口；此处为理解已有 streamMode 知识点，先保留一条迭代器中的明确分支，不同时接入两种流 API。
 
+## LangSmith 执行追踪
+
+Agent 和 PostgreSQL 仍在本机运行；本功能仅上传追踪，不启动 Agent Server 或本地 LangSmith。官方接入机制于 2026-10-23 核对，SDK 固定为 langsmith 0.11.0。
+
+在 `apps/agent/.env` 填写：
+
+```dotenv
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=你的LangSmith密钥
+LANGSMITH_AGENT_ID=leeway-support
+LANGSMITH_AGENT_ENVIRONMENT=local
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工作区使用 AgentAddress：上述配置发送到 leeway-support → Local → Tracing；不要同时配置 LANGSMITH_PROJECT。老版 project 工作区仍可仅设置 LANGSMITH_PROJECT，缺省为 leeway-support-dev。云端是否收到需实际查看，启动提示不代表验收。Key 仅保存在服务端环境配置，不提交 Git。[官方 Agent 路由说明](https://docs.langchain.com/langsmith/log-traces-to-agent)（2026-10-23 核对）。
+
+运行 `pnpm start -- --debug` 并输入问题，每轮结束显示追踪 ID。每轮是独立 trace，模型调用为子 run；相同 thread_id 的多轮归入同一会话。普通模式展示保持简洁；追踪关闭（默认 false）时不创建上传 client/callback。生成关联 ID 本身不需要联网。
+
+调用链：index.ts 加载环境 → createTracing 创建官方 Client/LangChainTracer → withConfig 注入 callbacks → runSupportAgent 为每轮设置 runId/runName/thread metadata → 框架记录节点与模型 → 退出 finally 等待 callbacks 和 SDK 批次提交。
+
+上传前过滤已配置的模型 Key、LangSmith Key、数据库连接串，以及常见凭据字段。默认允许上传问答用于排查历史输入；这不是完整 PII 脱敏，真实客户数据上线前需要独立治理。可配置 `LANGSMITH_HIDE_INPUTS=true`、`LANGSMITH_HIDE_OUTPUTS=true` 隐藏相应字段；不改变实际模型请求或 PostgreSQL checkpoint。错误记录会过滤已知凭据，不能把用户任意提交的敏感信息当作已全部识别。
+
+上传请求默认限制 10 秒，可通过 `LANGSMITH_TIMEOUT_MS` 配置（100–60000 毫秒）；不开自动上传重试，追踪缓冲最多 5 MiB、提交并发 1。上传不可用时区分 HTTP 401/403/429、网络连接与超时，提示追踪可能缺失，主流程结果不因上传错误改变；启用却缺 Key 或 endpoint 非法时启动前明确报错。当前 Key 已能确定工作区，不配置 Workspace ID；未来确有跨工作区需求再单独设计。退出提交是尽力而为，不保证进程被强杀后仍保存追踪。运行日志、数据库审计、超时/取消/重试和执行预算仍由应用逐步建设，不能由追踪平台代替。
+
+`pnpm test` 与 `pnpm test:postgres` 在预加载阶段关闭自动云追踪；tracing.test.ts 显式使用本地 HTTP 接收端 + fakeModel 验证，不需要真实 LangSmith Key。模型 usage 若缺失则无法凭空计算 Token；中转服务价格需单独配置和验证，界面估算不等于真实账单。
+
+依据：[LangChain 追踪](https://docs.langchain.com/langsmith/trace-with-langchain)、[会话关联](https://docs.langchain.com/langsmith/threads)、[敏感字段处理](https://docs.langchain.com/langsmith/mask-inputs-outputs)。取舍与验收见 [追踪迭代记录](docs/iterations/langsmith-tracing.md)。
+
 ## 离线流程测试
 
 根目录运行 `pnpm test`，或者单独执行 `pnpm --filter @leeway-support/agent test`。测试使用 Node 内置测试运行器，无需新增测试框架依赖。
@@ -149,6 +177,7 @@ apps/agent/
       env.ts            加载应用环境，路径固定为 apps/agent/.env
       model.ts          创建并配置真实模型
       checkpoint.ts     PostgreSQL 连接池、官方 saver 与初始化
+      tracing.ts        可选 LangSmith callback、上传脱敏与退出提交
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
   tests/cli-debug.test.ts 调试展示的成功、失败、断流和输出范围测试
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
@@ -176,7 +205,7 @@ agent.test.ts → fakeModel 控制响应或错误               → createSuppor
 
 以上路径共用 agent.ts 中的定义；正常和调试展示使用同一应用入口和执行层。工厂每次调用创建一个 Agent 实例；依赖注入在这里就是把模型作为函数参数传入，没有额外容器。
 
-当前源码共七个文件，根目录仅保留 index.ts。终端相关的三个小文件已合并；模型和数据库仍分别负责不同依赖，Agent 执行不依赖终端配置。无需通过 barrel/re-export 文件跳转，直接导入实际实现。历史迭代文档中的旧路径以当时版本为准，最新结构见本文和 [整理记录](docs/iterations/source-organization.md)。
+根目录仅保留 index.ts。终端相关逻辑已合并；模型、数据库和追踪分别负责不同外部依赖，Agent 执行不依赖终端配置。无需通过 barrel/re-export 文件跳转，直接导入实际实现。历史迭代文档中的旧路径以当时版本为准，最新结构见本文和 [整理记录](docs/iterations/source-organization.md)。
 
 ChatOpenAI 负责模型通信，createAgent 负责执行流程，PostgresSaver 保存会话 checkpoint；离线测试仍使用 MemorySaver。createAgent 内部基于 LangGraph，尚未手写 StateGraph。当前 tools 为空，没有知识库、业务操作或长期记忆。
 

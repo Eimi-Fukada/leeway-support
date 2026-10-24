@@ -1,6 +1,9 @@
+minimumReleaseAge: 0
+
 packages:
   - "apps/*"
 
 # tsx 使用 esbuild 转换 TypeScript，允许其安装脚本校验本机二进制。
-onlyBuiltDependencies:
-  - esbuild
+allowBuilds:
+  '@scarf/scarf': true
+  esbuild: true

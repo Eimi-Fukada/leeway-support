@@ -1,5 +1,7 @@
 # 补充信息的结构化输出与生成式 UI
 
+2026-10-25：本记录描述首次表单实现。当前已在同一条链路增强为 interrupt/resume，表单提交不再作为新的 HumanMessage 开始下一轮；当前契约、状态和验证见 [持久补资料流程](information-interrupt.md)。
+
 日期：2026-10-24；关联 B4/B7、E2–E4/E7。实现现有产品的一个客服交互闭环，基于 [交互设计](../support-interaction-design.md)。
 
 ## 问题、输入、输出与失败

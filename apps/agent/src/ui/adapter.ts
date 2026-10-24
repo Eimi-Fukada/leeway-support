@@ -32,6 +32,11 @@ export class SupportUiAgent extends AbstractAgent {
           if (!/^[A-Za-z0-9_-]{1,128}$/.test(input.threadId)) throw new InformationError("会话标识无效。");
           const forwarded = forwardedSchema.safeParse(input.forwardedProps ?? {});
           if (!forwarded.success) throw new InformationError("提交内容格式无效。");
+          if (input.resume?.length && (input.resume.length !== 1 || !forwarded.data.informationSubmission ||
+            input.resume[0]!.interruptId !== forwarded.data.informationSubmission.interruptId ||
+            input.resume[0]!.status !== (forwarded.data.informationSubmission.cancelled ? "cancelled" : "resolved"))) {
+            throw new InformationError("恢复协议与表单提交不匹配。");
+          }
           const latest = input.messages.at(-1);
           if (!latest || latest.role !== "user" || typeof latest.content !== "string" || !latest.content.trim() || latest.content.length > 12_000)
             throw new InformationError("请提交有效的问题。");
@@ -42,21 +47,27 @@ export class SupportUiAgent extends AbstractAgent {
             emit({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: assistantId, delta: event.text });
           }, input.threadId, this.support, { service: this.information,
             submission: forwarded.data.informationSubmission, signal: abort.signal });
-          if (!textStarted) {
+          if (!textStarted && result.status !== "waiting_for_input") {
             // 同一已完成提交的重放直接返回持久结果，不再调用模型。
             emit({ type: EventType.TEXT_MESSAGE_START, messageId: assistantId, role: "assistant" });
             emit({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: assistantId, delta: result.answer });
           }
-          emit({ type: EventType.TEXT_MESSAGE_END, messageId: assistantId });
+          if (textStarted || result.status !== "waiting_for_input") emit({ type: EventType.TEXT_MESSAGE_END, messageId: assistantId });
           if (result.information) {
-            // 只有同一轮正常完成后才发布可填写表单；不泄露其他内部工具/状态。
+            // 网络执行已暂停；表单的 pending 不代表原逻辑任务已经完成。
             const callId = result.information.formId;
             emit({ type: EventType.TOOL_CALL_START, toolCallId: callId, toolCallName: "request_information", parentMessageId: assistantId });
             emit({ type: EventType.TOOL_CALL_ARGS, toolCallId: callId, delta: JSON.stringify(result.information.spec) });
             emit({ type: EventType.TOOL_CALL_END, toolCallId: callId });
             emit({ type: EventType.TOOL_CALL_RESULT, toolCallId: callId, messageId: randomUUID(), role: "tool", content: JSON.stringify(result.information) });
           }
-          emit({ type: EventType.RUN_FINISHED, threadId: input.threadId, runId: input.runId });
+          emit({ type: EventType.CUSTOM, name: "support.status", value: { status: result.status ?? "completed", logicalRunId: result.runId } });
+          emit({ type: EventType.RUN_FINISHED, threadId: input.threadId, runId: input.runId,
+            ...(result.status === "waiting_for_input" && result.information?.interruptId ? {
+              outcome: { type: "interrupt" as const, interrupts: [{ id: result.information.interruptId,
+                reason: "information", message: result.information.spec.title, expiresAt: result.information.expiresAt }] },
+            } : {}),
+          });
         } catch (cause) {
           if (textStarted) emit({ type: EventType.TEXT_MESSAGE_END, messageId: assistantId });
           emit({ type: EventType.RUN_ERROR, message: cause instanceof InformationError ? cause.message

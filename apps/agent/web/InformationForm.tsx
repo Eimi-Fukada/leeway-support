@@ -6,7 +6,7 @@ import {
   type InformationForm as Form,
 } from "../src/interactions/contracts.ts";
 
-export function InformationForm({ form }: { form: Form }) {
+export function InformationForm({ form, onResolved }: { form: Form; onResolved?: () => void }) {
   const { agent } = useAgent({ agentId: "support" });
   const { copilotkit } = useCopilotKit();
   const [current, setCurrent] = useState(form);
@@ -31,27 +31,30 @@ export function InformationForm({ form }: { form: Form }) {
     return () => abort.abort();
   }, [form.formId, agent.threadId, agent.isRunning]);
   const unavailable =
-    current.status !== "pending" || Date.parse(current.expiresAt) <= Date.now();
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+    current.status !== "pending" || !current.interruptId || Date.parse(current.expiresAt) <= Date.now();
+  async function submit(cancelled = false) {
     setError("");
     try {
-      const values = validateAnswers(current.spec, answers);
+      const values = cancelled ? {} : validateAnswers(current.spec, answers);
+      if (!current.interruptId) throw new Error("暂停点不可用，请刷新表单。");
       setSending(true);
       // 页面只传答案和引用；身份、原始规格及状态都由服务端重新读取。
       if (!agent.messages.some((message) => message.id === submissionId))
         agent.addMessage({
           id: submissionId,
           role: "user",
-          content: "提交补充信息。",
+          content: cancelled ? "取消补充信息。" : "提交补充信息。",
         });
       await copilotkit.runAgent({
         agent,
+        resume: [{ interruptId: current.interruptId, status: cancelled ? "cancelled" : "resolved" }],
         forwardedProps: {
           informationSubmission: {
             formId: current.formId,
             formVersion: current.formVersion,
             submissionId,
+            interruptId: current.interruptId,
+            cancelled,
             answers: values,
           },
         },
@@ -61,6 +64,7 @@ export function InformationForm({ form }: { form: Form }) {
       );
       if (response.ok)
         setCurrent(informationFormSchema.parse(await response.json()));
+      onResolved?.();
     } catch (cause) {
       setError(
         cause instanceof Error && cause.message.startsWith("补充信息：")
@@ -75,7 +79,8 @@ export function InformationForm({ form }: { form: Form }) {
     <form
       className="information-form"
       onSubmit={(event) => {
-        void submit(event);
+        event.preventDefault();
+        void submit();
       }}
     >
       <div className="card-kicker">补充信息</div>
@@ -138,12 +143,13 @@ export function InformationForm({ form }: { form: Form }) {
           </label>
         ))}
         <button type="submit">{sending ? "正在提交…" : "提交信息"}</button>
+        <button type="button" onClick={() => { void submit(true); }}>取消补充</button>
       </fieldset>
       {unavailable && (
         <p className="form-status">
           {current.status === "submitted"
             ? "资料已接收"
-            : "表单已失效，请继续描述问题"}
+            : "表单已失效，请新建会话"}
         </p>
       )}
       {error && (

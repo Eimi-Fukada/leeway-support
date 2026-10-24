@@ -139,6 +139,8 @@ D1 及最小观测在 A/B 期间引入；D2–D5 在接入真实个人数据/业
 
 ## G. 确定性业务流程、HITL 与人工接管
 
+2026-10-25：G3 的补资料暂停/恢复已在原产品主链路实现：同一 request_information 工具内部 interrupt、持久 checkpoint、同身份/thread/interrupt 的 Command.resume、原表单组件提交或取消、刷新/跨进程恢复与预算连续。没有新增审批 demo 或 Deep Agents 依赖。业务写操作审批/人工客服接管仍未实现，见 [迭代](iterations/information-interrupt.md)。
+
 来源：apps/support-chat/hitl，以及 time-travel 中的显式节点设计。应先定义权限、动作契约和验收再实现真实写入。
 
 | 编号 | 本轮只解决什么 | 最小验收 |

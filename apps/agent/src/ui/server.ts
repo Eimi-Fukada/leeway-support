@@ -15,6 +15,8 @@ import { loadAgentEnv } from "../config/env.ts";
 import { InformationService } from "../interactions/service.ts";
 import { localSupportContext, memoryScope, checkpointThreadId } from "../support-context.ts";
 import { SupportUiAgent } from "./adapter.ts";
+import { runSupportAgent } from "../agent/run.ts";
+import { InformationError } from "../interactions/contracts.ts";
 
 async function main() {
   const options = parseCliOptions(process.argv.slice(2));
@@ -56,6 +58,20 @@ async function main() {
           response.setHeader("Cache-Control", "no-store");
           response.writeHead(200, { "Content-Type": "application/json" });
           response.end(JSON.stringify({ user: options.userId })); return;
+        }
+        if (url.pathname === "/api/conversation") {
+          try {
+            if (request.method !== "GET") { response.writeHead(405).end(); return; }
+            const thread = url.searchParams.get("thread") ?? "";
+            if (!/^[A-Za-z0-9_-]{1,128}$/.test(thread)) throw new Error();
+            const state = await runSupportAgent(agent, "", undefined, thread, support, { service: information, restore: true });
+            response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+            response.end(JSON.stringify({ status: state.status, information: state.information }));
+          } catch (cause) {
+            const busy = cause instanceof InformationError && cause.message.includes("正在处理");
+            response.writeHead(busy ? 423 : 409, { "Content-Type": "application/json" }).end(JSON.stringify({ code: busy ? "THREAD_BUSY" : "STATE_UNAVAILABLE", error: "无法恢复当前会话，请新建会话或核对服务状态。" }));
+          }
+          return;
         }
         if (url.pathname.startsWith("/api/information/")) {
           try {

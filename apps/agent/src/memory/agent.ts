@@ -46,12 +46,28 @@ export function memoryTools(service: MemoryService) {
     const threadId = runtime.config.configurable?.thread_id;
     if (typeof threadId !== "string")
       return { status: "rejected", code: "INVALID_EVIDENCE" };
+    // 表单答案现在由工具返回；仅采用程序绑定的 request_information 结果作为用户来源。
+    // 从最近 HumanMessage 起查找，避免下一轮误用上一份表单证据。
+    const humanIndex = runtime.state.messages.lastIndexOf(latest);
+    const answered = runtime.state.messages.slice(humanIndex + 1).reverse().find((message) =>
+      ToolMessage.isInstance(message) && message.name === "request_information");
+    let sourceText = latest.text;
+    let sourceMessageId = latest.id;
+    if (answered) {
+      try {
+        const value = JSON.parse(answered.text);
+        if (value.status === "answered" && typeof value.source?.messageId === "string" && typeof value.source?.text === "string") {
+          sourceText = value.source.text;
+          sourceMessageId = value.source.messageId;
+        }
+      } catch { /* 非产品结构不作为补资料来源。 */ }
+    }
     return service.write(context, {
       change,
-      operationId: `${latest.id}:${runtime.toolCallId}`,
+      operationId: `${sourceMessageId}:${runtime.toolCallId}`,
       threadId,
-      messageId: latest.id,
-      sourceText: latest.text,
+      messageId: sourceMessageId,
+      sourceText,
       evidenceQuote,
     });
   }

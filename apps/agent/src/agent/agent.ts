@@ -42,6 +42,7 @@ export function createSupportAgent(
   memory?: MemoryService,
   information?: InformationBackend,
 ) {
+  if (information && !checkpointer) throw new Error("补充信息：持久暂停需要配置 checkpointer。");
   // createAgent 基于 LangGraph 构建执行流程；这里先不手写 StateGraph。
   // 仅在注入记忆服务时开放内部记忆工具；当前没有业务工具。
   return createAgent({
@@ -67,7 +68,7 @@ export function createSupportAgent(
       "目前没有接入知识库或业务工具，请明确说明能力边界，" +
       "不要编造订单、任务状态、产品规则或声称已经执行操作。" +
       (information
-        ? "需要用户补充关键信息时可调用 request_information 创建表单。问题和选项按本轮需要决定，不要求每次创建；不要在正文重复输出表单 JSON。表单创建后简短说明并结束本轮，等待用户提交。用户也可直接以文本补充。"
+        ? "需要用户补充关键信息时单独调用 request_information，Graph 会暂停等待用户填写或取消。不要在正文输出表单 JSON，不要和其他工具并行调用。恢复后依据 answered/cancelled 结果继续回答；一个逻辑任务最多一份表单，不重复索要已取消的资料。"
         : ""),
   });
 }

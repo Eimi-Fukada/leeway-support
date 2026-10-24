@@ -79,7 +79,7 @@ DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/agent-support
 
 ## 会话与短期记忆
 
-index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始化官方 checkpoint 表并注入 Agent；退出时关闭 readline 和连接池。不配置学习专用数据库或 schema。数据库不会由程序创建。chat.ts 默认生成 thread_id；传 --thread 时先检查已保存状态，未知会话或有未完成步骤的会话明确拒绝，避免隐式创建或重试。恢复成功后仅提交新问题，由框架加载历史。/new 生成新 ID，不删除旧 checkpoint。EOF 结束输入，排在前面的已读问题仍按顺序处理；/exit 在轮次之间退出，不是运行中取消命令。
+index.ts 创建模型和 PostgreSQL saver，在产品数据库 public 中初始化官方 checkpoint 表并注入 Agent；退出时关闭 readline 和连接池。不配置学习专用数据库或 schema。数据库不会由程序创建。chat.ts 默认生成 thread_id；--thread 可读取已完成会话，或恢复本产品已识别的补资料暂停点。未知、失败或其他未确认步骤仍拒绝自动执行。补资料恢复使用 Command.resume，普通新一轮才提交新 HumanMessage。/new 生成新 ID，不删除旧 checkpoint。EOF 与 /exit 结束终端；已保存的等待状态可在以后恢复，不是删除或取消请求。
 
 连接或读写失败不降级为内存。连接等待 5 秒、查询及服务端 statement 超时各 10 秒，每个连接池最多 5 个连接；checkpoint 与长期记忆各有一个池。setup 是官方建表/迁移；当前启动时检查，生产应独立管理迁移和权限。失败轮可能已保存用户输入，但不会把断流片段当作成功回答；不自动重放整轮或回滚 checkpoint。主回答调用的有限重试不重复提交用户消息。数据库 checkpoint 仍是短期记忆，跨会话记忆由独立记忆表提供。
 
@@ -313,10 +313,14 @@ corepack pnpm ui -- --user alice
 
 普通回答继续流式展示；缺少信息时，Agent 可调用 `request_information`，输出 title/description/fields。预写表单组件支持 text/textarea/select，问题和选项按本轮需要产生，不在组件中固定业务选项。可输入“软件打不开，请用表单询问使用环境和错误现象”手动验收；程序不按这些词匹配固定问答。
 
-表单经校验且创建轮成功结束后才可提交。服务端按保存的规格校验答案，提交后在同一会话继续回答；重复提交重放已保存结果，不重复调用模型。新问题使旧表单失效，默认 30 分钟过期；失败/未完成会话不自动续跑。CLI 同样支持结构化工具，把问题转为可读文字展示。
+表单现在复用原链路进行持久暂停：request_information 创建幂等表单后调用 interrupt，Graph 保存 checkpoint，返回 waiting_for_input，不继续主模型回答，也不报告逻辑任务完成。服务端验证身份、thread、表单、interrupt ID、有效期及答案后，用 Command.resume 恢复原工具；答案以 ToolMessage 回到模型，取消也走同一条恢复链路。重复已完成提交只重放持久结果，不重复恢复或调用模型。
 
-新增产品表 `public.support_information_forms`，启动时自动初始化；表单归属、状态和幂等由程序管理，不由模型生成。模型配置继续使用 apps/agent/.env，表单策略写在代码中，无新增环境变量。
+等待期间聊天输入框禁用，服务端拒绝用普通新问题绕过暂停。浏览器按开发身份保存逻辑 thread ID，刷新后重新读取服务器等待状态并显示同一份表单；这不是完整的聊天历史重放或运行中断线重连。关闭页面时如果正在生成仍沿用原有取消策略；已经暂停时不占着请求或会话锁等待用户。表单默认 30 分钟过期，过期/未知/失败状态不能自动续跑，可新建会话；旧版本没有 interrupt ID 的表单也不自动恢复。
 
-调用链：`web/App.tsx` 注册渲染器 → Copilot Runtime → `src/ui/adapter.ts` → 原 `runSupportAgent` → `request_information` / `InformationService` → 有效表单结果 → `web/InformationForm.tsx` → 提交 → 同会话下一轮。契约在 `src/interactions/contracts.ts`；前端只引用该纯数据模块，服务端源码不打包进页面。
+CLI 等待时使用 `/submit {"字段key":"答案"}` 或 `/cancel`，字段 key/选择值在终端打印；--thread 也可恢复等待表单。取消表示用户放弃该次补资料，Agent 可解释信息不足，不等于业务操作回滚。正常完成才清空 run 预算，等待/恢复沿用原逻辑任务计数。
 
-开发入口仅监听本机，不具备业务登录或正式 SDK；页面刷新会创建新会话，长期记忆保留。`corepack pnpm build` 验证客户端构建，目前 ui 命令运行 Vite 开发服务，未提供生产部署入口。完整机制、取舍、验证及遗留见 [实现记录](docs/iterations/information-ui.md)，设计依据见 [交互设计](docs/support-interaction-design.md)。
+产品表 `public.support_information_forms` 启动时自动补充 interrupt_id 列；表单归属、状态和幂等由程序管理，不由模型生成。创建以原逻辑 run/toolCall 幂等，恢复重进工具不会重复建表单；一项逻辑任务最多一份，不支持把补资料和其他工具并行调用。模型配置继续使用 apps/agent/.env，无新增环境变量。
+
+调用链：Copilot Runtime → 原 runSupportAgent → request_information → interrupt/checkpoint → 同一 InformationForm 组件 → 服务端校验 → Command.resume → 原工具返回答案/取消 → 主模型继续。AG-UI 以 RUN_FINISHED.outcome=interrupt 区分网络执行结束与任务成功，客户端提交携带匹配的 resume 描述，但真实 Graph resume 值始终由服务端重建。契约在 src/interactions/contracts.ts。
+
+开发入口仅监听本机，不具备业务登录或正式 SDK；“新会话”按钮换 thread，长期记忆保留。corepack pnpm build 验证客户端构建，ui 命令仍运行 Vite 开发服务。原始表单实现见 [历史记录](docs/iterations/information-ui.md)，当前暂停/恢复的契约、限制与验证见 [持久补资料流程](docs/iterations/information-interrupt.md)。

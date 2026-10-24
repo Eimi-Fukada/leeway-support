@@ -68,6 +68,8 @@ export const submissionSchema = z
     formId: z.uuid(),
     formVersion: z.literal(1),
     submissionId: z.uuid(),
+    interruptId: z.string().min(1).max(256),
+    cancelled: z.boolean().optional(),
     answers: z.record(z.string(), z.string().max(2000)),
   })
   .strict();
@@ -79,14 +81,28 @@ export const informationFormSchema = z
     formVersion: z.literal(1),
     status: z.enum(["draft", "pending", "submitted", "invalidated"]),
     expiresAt: z.iso.datetime(),
+    interruptId: z.string().min(1).max(256).optional(),
     spec: informationSpecSchema,
   })
   .strict();
 export type InformationForm = z.infer<typeof informationFormSchema>;
 
+export const informationInterruptSchema = z.object({
+  kind: z.literal("information"),
+  formId: z.uuid(),
+  runId: z.uuid(),
+}).strict();
+
+// 仅由服务端验证 submission 后生成，外部不能直接提交 Graph resume。
+export const informationReplySchema = z.object({
+  formId: z.uuid(), submissionId: z.uuid(), cancelled: z.boolean(),
+  answers: z.record(z.string(), z.string()),
+}).strict();
+export type InformationReply = z.infer<typeof informationReplySchema>;
+
 export class InformationError extends Error {
-  constructor(message: string) {
-    super(`补充信息：${message}`);
+  constructor(message: string, options?: ErrorOptions) {
+    super(`补充信息：${message}`, options);
     this.name = "InformationError";
   }
 }

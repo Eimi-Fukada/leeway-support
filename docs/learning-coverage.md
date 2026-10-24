@@ -1,6 +1,6 @@
 # 客服产品与 Agent 实践的双向学习覆盖
 
-更新：2026-10-24。状态：开发与学习约定，缺口清单待逐项实施。
+更新：2026-10-25。状态：开发与学习约定，缺口清单待逐项实施。
 
 ## 两个仓库如何配合
 
@@ -26,7 +26,7 @@
 | 模拟、规划、文件 D13–D15 | `tool-emulator-middleware.ts`、`todo-list-middleware.ts`、`filesystem-middleware.ts` | 区分模拟证据、计划和完成事实；文件能力只在受控实验/运行环境使用 |
 | 流式消息、界面与嵌入 E | `apps/support-chat/basic-chat/`、`generative-ui/`、`ai-elements/`、`apps/copilotkit-demo/` | 已接本地 CopilotKit 聊天页、现有 Agent 的 AG-UI 适配和补资料表单提交；真实模型浏览器闭环通过，见 [实现记录](iterations/information-ui.md)。记忆结果卡片、宿主动作、业务授权、正式 SDK 和重连仍待实现 |
 | 并发、重连、分支与回放 F | `apps/support-chat/message-queues/`、`join-rejoin/`、`branching/`、`time-travel/`；待补多实例运行所有权实验 | 观察连接不启动新任务；跨用户隔离；回放不执行真实写操作 |
-| 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts`；待补持久幂等和人工认领实验 | prepare → 确认 → execute；确认绑定参数；恢复不重复副作用；人工接管有实际状态 |
+| 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts` 作对照 | G3 补资料已在原产品中持久 interrupt/resume，支持填写/取消、刷新与跨进程恢复、表单幂等和预算连续；见 [迭代](iterations/information-interrupt.md)。业务写入审批、人工认领与接管未实现 |
 | 子 Agent / 并行 H | `subagent.ts`、`subagent-middleware.ts`、`apps/support-chat/openui/parallel/` | 诊断委派与上下文隔离；受限权限、总预算、超时及部分失败 |
 | 知识入库 I1–I3 | `检索策略.md` 为思路资料；待补 `labs/knowledge-ingestion/` | 文档解析、切块、原文定位、版本、发布撤回；上传不等于可检索 |
 | RAG I1–I3 | 待补 `labs/rag/` | 先固定证据和引用，再 embedding、dense/关键词融合、可选 rerank；无答案与检索失败不同 |
@@ -99,6 +99,8 @@
 三者各选一个最小例子分别实践；MCP 工具调用不自动实现持久事件消费。真实业务项目、首个事件名称和载荷尚未确定。
 
 ## 下一小步
+
+2026-10-25：已在原表单链路加入 G3 interrupt/resume，等待/完成明确区分，提交和取消都恢复原流程，主逻辑任务预算不重置。原表单读取、UI 与身份隔离复用，新增刷新等待态恢复与跨进程测试，详见 [迭代](iterations/information-interrupt.md)。后续再按真实问题选择审批、人工接管或交互质量评估，不把本轮当成真实业务写入授权。
 
 2026-10-24：已按 [设计](support-interaction-design.md)实现补资料工具/CLI、现有 Agent 的本地服务适配与 CopilotKit 表单提交闭环，详见 [实现记录](iterations/information-ui.md)。可信 ID/状态由程序生成，不把表单填写当作业务操作授权。下一切片可增加已有记忆工具结果卡片或根据真实使用补充质量评估；不自动扩展图表和业务操作。
 

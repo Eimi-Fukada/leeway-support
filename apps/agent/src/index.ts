@@ -7,6 +7,8 @@ import { loadAgentEnv } from "./config/env.ts";
 import { createTracing } from "./config/tracing.ts";
 import { createMemory } from "./config/memory.ts";
 import { localSupportContext } from "./support-context.ts";
+import { createDatabasePool } from "./config/database.ts";
+import { InformationService } from "./interactions/service.ts";
 
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
@@ -17,11 +19,14 @@ async function main(): Promise<void> {
   try {
     const model = createModel();
     const checkpointer = await createCheckpointer();
+    const interactionPool = createDatabasePool();
     let memory: Awaited<ReturnType<typeof createMemory>> | undefined;
     // callbacks 通过框架传给各子节点；不更换 Agent 或托管运行环境。
     try {
       memory = await createMemory();
-      const agent = createSupportAgent(model, checkpointer, {}, {}, memory.service).withConfig({ callbacks: tracing.callbacks });
+      const information = new InformationService(interactionPool);
+      await information.setup();
+      const agent = createSupportAgent(model, checkpointer, {}, {}, memory.service, information).withConfig({ callbacks: tracing.callbacks });
       console.log(`[本地开发身份] ${options.userId}；未来业务入口必须在服务端完成认证后提供 SupportContext。`);
       if (tracing.enabled) console.log("[追踪] LangSmith 已启用；上传记录不代表云端已验收。");
       let lines: ReturnType<typeof createInterface> | undefined;
@@ -29,13 +34,13 @@ async function main(): Promise<void> {
         await chat(agent, () => {
           lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
           return lines;
-        }, undefined, options.debug, options.threadId, context);
+        }, undefined, options.debug, options.threadId, context, information);
       } finally {
         lines?.close();
       }
     } finally {
       try { await memory?.close(); }
-      finally { await checkpointer.end(); }
+      finally { await Promise.allSettled([interactionPool.end(), checkpointer.end()]); }
     }
   } finally {
     await tracing.flush();
@@ -48,6 +53,11 @@ main().catch((error: unknown) => {
   const visited = new Set<unknown>();
   while (current instanceof Error && !visited.has(current)) {
     visited.add(current);
+    if (current.name === "InformationError") {
+      console.error("[agent]", current.message);
+      process.exitCode = 1;
+      return;
+    }
     if (["ModelCallLimitMiddlewareError", "ToolCallLimitExceededError"].includes(current.name) ||
       current.constructor.name === "ToolCallLimitExceededError") {
       console.error("[agent] 已达到模型或工具调用上限，本轮未完成；不会继续执行，请检查会话预算。");

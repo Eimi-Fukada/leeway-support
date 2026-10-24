@@ -21,6 +21,11 @@ import {
   memoryTools,
 } from "../memory/agent.ts";
 import type { MemoryService } from "../memory/service.ts";
+import type { InformationBackend } from "../interactions/service.ts";
+import {
+  informationTool,
+  informationMiddleware,
+} from "../interactions/agent.ts";
 
 export interface CallLimits {
   model?: ModelCallLimits;
@@ -35,12 +40,16 @@ export function createSupportAgent(
   summary: SummaryOptions = {},
   limits: CallLimits = {},
   memory?: MemoryService,
+  information?: InformationBackend,
 ) {
   // createAgent 基于 LangGraph 构建执行流程；这里先不手写 StateGraph。
   // 仅在注入记忆服务时开放内部记忆工具；当前没有业务工具。
   return createAgent({
     model,
-    tools: memory ? memoryTools(memory) : [],
+    tools: [
+      ...(memory ? memoryTools(memory) : []),
+      ...(information ? [informationTool(information)] : []),
+    ],
     contextSchema: agentContextSchema,
     checkpointer,
     // 主模型预算先检查，耗尽时不再触发摘要；工具预算在 afterModel、工具执行前检查。
@@ -50,11 +59,15 @@ export function createSupportAgent(
       createSummaryMiddleware(model, summary),
       createModelRetryMiddleware(),
       ...(memory ? [createMemoryMiddleware(memory)] : []),
+      ...(information ? [informationMiddleware()] : []),
       createToolCallLimitMiddleware(limits.tool),
     ],
     systemPrompt:
       "你是 Leeway Support 的智能客服助手，使用简洁的中文回答。" +
       "目前没有接入知识库或业务工具，请明确说明能力边界，" +
-      "不要编造订单、任务状态、产品规则或声称已经执行操作。",
+      "不要编造订单、任务状态、产品规则或声称已经执行操作。" +
+      (information
+        ? "需要用户补充关键信息时可调用 request_information 创建表单。问题和选项按本轮需要决定，不要求每次创建；不要在正文重复输出表单 JSON。表单创建后简短说明并结束本轮，等待用户提交。用户也可直接以文本补充。"
+        : ""),
   });
 }

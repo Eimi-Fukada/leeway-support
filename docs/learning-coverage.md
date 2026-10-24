@@ -1,6 +1,6 @@
 # 客服产品与 Agent 实践的双向学习覆盖
 
-更新：2026-10-23。状态：开发与学习约定，缺口清单待逐项实施。
+更新：2026-10-24。状态：开发与学习约定，缺口清单待逐项实施。
 
 ## 两个仓库如何配合
 
@@ -16,15 +16,15 @@
 | --- | --- | --- |
 | 模型接入与执行基础 A | `model.ts`、`shared/model.ts`、`模型接入说明.md`、各主题测试；待补统一的故障注入实验 | 配置和 Agent 解耦；无密钥复现流程；超时、取消、错误可区分 |
 | Agent 循环与工具 B1–B3 | `beginner.ts`、`shared/orders.ts` | 第一个只读业务查询；看清模型 → tool_calls → 工具结果 → 模型的循环及停止条件 |
-| Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 工具参数、工具结果、最终回答分别校验；无效输出不能生成成功卡片 |
+| Schema / 结构化输出 B4–B7 | `structured-output.ts`、`apps/support-chat/structured-output/` | 已实现补资料工具的结构化参数/结果、两端校验和本轮完成后消费，见 [实现记录](iterations/information-ui.md)。普通回答仍为文本；最终业务 structuredResponse 按后续任务单独加入 |
 | 状态和短期记忆 C1–C4 | `memory.ts`、`command-update.ts`、`remember.ts`、`记忆与持久化说明.md`；`labs/persistent-memory/` 仅保留产品实践说明 | C2 及 C4 持久化部分已进入主路径：产品数据库 public 中的 PostgreSQL checkpoint、同 thread 历史、--thread 恢复已完成会话；产品跨进程测试已验证。多用户归属鉴权/安全续跑未实现 |
 | 长期记忆 C5–C7 | 本轮检出只有 `memory.ts` / `remember.ts` 等短期状态对照；此前引用的 `记忆与持久化说明.md` 本轮未找到，由产品源码/测试完成实践 | 已接 SupportContext、PostgreSQL 应用记忆仓储与模型自主选择的三项记忆工具，支持来源/版本/幂等、跨会话读取、修正和遗忘；不依赖触发词，见 [迭代](iterations/support-context-long-term-memory.md)。线上身份认证、后台整合和提取质量评估仍未完成 |
 | 上下文工程 C8–C9 | `summarization-middleware.ts`、`context-editing-middleware.ts` | C8 已加入产品：官方摘要 + 应用失败校验、内部文本过滤与代码集中配置预算（不使用环境变量）；旧原文保留历史 checkpoint，摘要状态可跨进程恢复。C9 工具输出清理未实现，模型窗口/摘要保真仍待校准 |
-| Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；可信身份和执行侧鉴权未实现 | D3/D4 已装配主 Agent，明确模型步骤/工具准入计数、每轮清零与 checkpoint 跨进程累计、超限报错、并行批次整批拒绝，见 [迭代记录](iterations/call-limits.md)。不是费用账本/多用户配额；生产工具列表仍空 |
+| Hooks、权限和预算 D1–D5 | `middleware.ts`、`model-call-limit-middleware.ts`、`tool-call-limit-middleware.ts`；生产身份认证和业务授权未实现 | D3/D4 已装配主 Agent，明确模型步骤/工具准入计数、每轮清零与 checkpoint 跨进程累计、超限报错、并行批次整批拒绝，见 [迭代记录](iterations/call-limits.md)。记忆及补资料内部工具均计入预算；不是费用账本/多用户配额，尚无业务工具 |
 | 错误、重试、降级、脱敏 D6–D9 | `fallback-middleware.ts`、`pii-middleware.ts`；模型分类重试通过产品故障注入测试学习 | D7 主回答有限重试、片段后不重试；D9 输入侧邮箱/银行卡/大陆手机号在 Graph 前脱敏、历史在摘要前清理、追踪上传脱敏已落地，见 [迭代记录](iterations/middleware-retry-pii.md)。输出防泄漏、全 PII 治理、工具重试和降级未实现 |
 | 工具发现 D11–D12 | `llm-tool-selector-middleware.ts`、`provider-tool-search-middleware.ts` | 大工具集是否值得预筛；比较成本、漏选与提供商限制 |
 | 模拟、规划、文件 D13–D15 | `tool-emulator-middleware.ts`、`todo-list-middleware.ts`、`filesystem-middleware.ts` | 区分模拟证据、计划和完成事实；文件能力只在受控实验/运行环境使用 |
-| 流式消息、界面与嵌入 E | `apps/support-chat/basic-chat/`、`generative-ui/`、`ai-elements/`、`apps/copilotkit-demo/` | 文本/状态/工具事件分开；宿主上下文和白名单页面动作；后端负责业务授权 |
+| 流式消息、界面与嵌入 E | `apps/support-chat/basic-chat/`、`generative-ui/`、`ai-elements/`、`apps/copilotkit-demo/` | 已接本地 CopilotKit 聊天页、现有 Agent 的 AG-UI 适配和补资料表单提交；真实模型浏览器闭环通过，见 [实现记录](iterations/information-ui.md)。记忆结果卡片、宿主动作、业务授权、正式 SDK 和重连仍待实现 |
 | 并发、重连、分支与回放 F | `apps/support-chat/message-queues/`、`join-rejoin/`、`branching/`、`time-travel/`；待补多实例运行所有权实验 | 观察连接不启动新任务；跨用户隔离；回放不执行真实写操作 |
 | 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts`；待补持久幂等和人工认领实验 | prepare → 确认 → execute；确认绑定参数；恢复不重复副作用；人工接管有实际状态 |
 | 子 Agent / 并行 H | `subagent.ts`、`subagent-middleware.ts`、`apps/support-chat/openui/parallel/` | 诊断委派与上下文隔离；受限权限、总预算、超时及部分失败 |
@@ -99,6 +99,8 @@
 三者各选一个最小例子分别实践；MCP 工具调用不自动实现持久事件消费。真实业务项目、首个事件名称和载荷尚未确定。
 
 ## 下一小步
+
+2026-10-24：已按 [设计](support-interaction-design.md)实现补资料工具/CLI、现有 Agent 的本地服务适配与 CopilotKit 表单提交闭环，详见 [实现记录](iterations/information-ui.md)。可信 ID/状态由程序生成，不把表单填写当作业务操作授权。下一切片可增加已有记忆工具结果卡片或根据真实使用补充质量评估；不自动扩展图表和业务操作。
 
 已增加 [会话摘要](iterations/conversation-summary.md)，短会话不增加调用；触发时摘要旧前缀并保留近期消息，无效摘要拒绝更新。模型预算是近似值，后续按真实语料验证；不等同长期记忆。
 

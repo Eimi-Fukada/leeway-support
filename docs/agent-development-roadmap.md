@@ -102,6 +102,8 @@ D1 及最小观测在 A/B 期间引入；D2–D5 在接入真实个人数据/业
 
 ## E. 流式交互、CopilotKit 与生成式 UI
 
+2026-10-24：[补资料与生成式 UI](iterations/information-ui.md)已实现首个本地闭环：结构化工具参数/结果、CLI、现有 Agent 的 AG-UI 适配、CopilotKit 页面及同会话提交。复用普通文本流；业务操作、正式 SDK、重连及记忆工具结果卡片未实现。[交互设计](support-interaction-design.md)保留扩展依据。
+
 来源：structured-output.ts 的多种 streamMode/streamEvents、apps/support-chat/{basic-chat,generative-ui,ai-elements}、apps/copilotkit-demo。
 
 | 编号 | 本轮只解决什么 | 最小验收 |

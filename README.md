@@ -302,3 +302,21 @@ pnpm --filter @leeway-support/agent start -- --user alice
 API 参考：[LangChain Agent](https://docs.langchain.com/oss/javascript/langchain/agents)、[ChatOpenAI](https://docs.langchain.com/oss/javascript/integrations/chat/openai)。
 
 长期目标见 [技术方案](docs/technical-proposal.md)，其中的目录是目标规划，当前实现范围以本 README 为准。
+
+## 补充信息表单与生成式 UI
+
+```sh
+corepack pnpm ui -- --user alice
+```
+
+打开 http://127.0.0.1:3100。这是使用真实模型、现有 PostgreSQL checkpoint 和长期记忆的本地客服调试页，开发身份由服务端启动参数提供。
+
+普通回答继续流式展示；缺少信息时，Agent 可调用 `request_information`，输出 title/description/fields。预写表单组件支持 text/textarea/select，问题和选项按本轮需要产生，不在组件中固定业务选项。可输入“软件打不开，请用表单询问使用环境和错误现象”手动验收；程序不按这些词匹配固定问答。
+
+表单经校验且创建轮成功结束后才可提交。服务端按保存的规格校验答案，提交后在同一会话继续回答；重复提交重放已保存结果，不重复调用模型。新问题使旧表单失效，默认 30 分钟过期；失败/未完成会话不自动续跑。CLI 同样支持结构化工具，把问题转为可读文字展示。
+
+新增产品表 `public.support_information_forms`，启动时自动初始化；表单归属、状态和幂等由程序管理，不由模型生成。模型配置继续使用 apps/agent/.env，表单策略写在代码中，无新增环境变量。
+
+调用链：`web/App.tsx` 注册渲染器 → Copilot Runtime → `src/ui/adapter.ts` → 原 `runSupportAgent` → `request_information` / `InformationService` → 有效表单结果 → `web/InformationForm.tsx` → 提交 → 同会话下一轮。契约在 `src/interactions/contracts.ts`；前端只引用该纯数据模块，服务端源码不打包进页面。
+
+开发入口仅监听本机，不具备业务登录或正式 SDK；页面刷新会创建新会话，长期记忆保留。`corepack pnpm build` 验证客户端构建，目前 ui 命令运行 Vite 开发服务，未提供生产部署入口。完整机制、取舍、验证及遗留见 [实现记录](docs/iterations/information-ui.md)，设计依据见 [交互设计](docs/support-interaction-design.md)。

@@ -14,10 +14,12 @@ import {
   type SupportContext,
 } from "../support-context.ts";
 import type { MemoryService, MemoryChange } from "./service.ts";
+import { interactionContextSchema } from "../interactions/agent.ts";
 
 // 外层允许框架自己的运行元数据；可信身份对象本身保持 strict 校验。
 export const agentContextSchema = z.object({
   support: supportContextSchema.optional(),
+  interaction: interactionContextSchema.optional(),
 });
 type Runtime = ToolRuntime<
   { messages: BaseMessage[] },

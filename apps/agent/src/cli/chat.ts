@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { createSupportAgent } from "../agent/agent.ts";
 import { runSupportAgent } from "../agent/run.ts";
 import { checkpointThreadId, type SupportContext } from "../support-context.ts";
+import type { InformationBackend } from "../interactions/service.ts";
 
 // 本文件按“启动参数 → 会话循环 → 单轮展示”组织，终端交互只需在这里阅读。
 export function parseCliOptions(args: string[]): { debug: boolean; threadId?: string; userId?: string } {
@@ -38,6 +39,7 @@ export async function chat(
   debug = false,
   resumeThreadId?: string,
   context?: SupportContext,
+  information?: InformationBackend,
 ): Promise<void> {
   let threadId = resumeThreadId ?? randomUUID();
   if (resumeThreadId !== undefined) {
@@ -64,7 +66,7 @@ export async function chat(
       write("[提示] 支持 /new 和 /exit；未知命令不会提交给模型。\n");
     } else if (question) {
       // 失败向上传播并终止输入循环，不自动提交下一行或重试失败轮次。
-      await runSupportCli(agent, question, write, debug, threadId, context);
+      await runSupportCli(agent, question, write, debug, threadId, context, information);
     }
     write("你> ");
   }
@@ -79,6 +81,7 @@ export async function runSupportCli(
   debug = false,
   threadId?: string,
   context?: SupportContext,
+  information?: InformationBackend,
 ) {
   write(debug ? "[开始] Agent 流式执行\n" : "[客服] ");
   try {
@@ -89,12 +92,18 @@ export async function runSupportCli(
         // 节点更新不是节点开始，也不是网络请求次数。
         write(`[节点更新] ${event.node}\n`);
       }
-    }, threadId, context);
+    }, threadId, context, information ? { service: information } : undefined);
     if (debug) {
       write(`[追踪ID] ${result.runId}\n`);
       write(`[最终回答] ${result.answer}\n`);
     }
     else write("\n");
+    if (result.information) {
+      const spec = result.information.spec;
+      write(`[补充信息] ${spec.title}\n${spec.description}\n`);
+      for (const field of spec.fields) write(`- ${field.label}${field.required ? "（必填）" : ""}${field.type === "select" ? `：${field.options.map((option) => option.label).join(" / ")}` : ""}\n`);
+      write("可直接用文字补充上述资料，或在聊天页填写表单。\n");
+    }
     write(`[完成] 耗时 ${result.elapsedMs} ms\n`);
     return result;
   } catch (error: unknown) {

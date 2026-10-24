@@ -5,17 +5,27 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "ui": "tsx src/ui/server.ts",
+    "build": "vite build",
     "test": "tsx --import ./tests/setup.ts --test tests/*.test.ts",
-    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts",
+    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
     "tsx": "4.23.15",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
   },
   "dependencies": {
+    "@ag-ui/client": "1.0.2",
+    "@ag-ui/core": "1.0.2",
+    "@copilotkit/react-core": "1.79.1",
+    "@copilotkit/runtime": "1.79.1",
     "@langchain/core": "1.2.20",
     "@langchain/langgraph": "1.5.2",
     "@langchain/langgraph-checkpoint-postgres": "1.1.2",
@@ -23,6 +33,9 @@
     "langchain": "1.5.18",
     "langsmith": "0.11.0",
     "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "rxjs": "7.8.1",
     "zod": "4.6.7"
   }
 }

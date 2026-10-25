@@ -9,6 +9,7 @@
     "build": "vite build",
     "test": "tsx --import ./tests/setup.ts --test tests/*.test.ts",
     "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts",
+    "eval:behavior": "tsx evals/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

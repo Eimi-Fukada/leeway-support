@@ -40,6 +40,9 @@ pnpm test:postgres
 
 # 检查 TypeScript 类型，不生成 JavaScript 文件
 pnpm typecheck
+
+# 列出行为评估用例，无模型请求；去掉 --list 执行真实模型评估
+pnpm eval:behavior -- --list
 ```
 
 ## 模型配置
@@ -302,6 +305,14 @@ pnpm --filter @leeway-support/agent start -- --user alice
 API 参考：[LangChain Agent](https://docs.langchain.com/oss/javascript/langchain/agents)、[ChatOpenAI](https://docs.langchain.com/oss/javascript/integrations/chat/openai)。
 
 长期目标见 [技术方案](docs/technical-proposal.md)，其中的目录是目标规划，当前实现范围以本 README 为准。
+
+## 客服行为回归评估
+
+已加入 24 个真实模型行为场景，覆盖普通问答、澄清、表单暂停/提交/取消、长期记忆、用户隔离、PII 和摘要。使用同一产品 Agent 和 PostgreSQL 服务，每个样本自动分配隔离测试身份，结束后清理自己的记录；不另建演示数据库。
+
+`pnpm eval:behavior -- --list` 列出用例，`pnpm eval:behavior` 执行全量，`pnpm eval:behavior -- --case greeting` 执行一例。实际运行会产生模型费用，默认不上传云追踪，报告保存在忽略提交的 artifacts/evals/。支持 --repeat 1–5 和 --baseline <report.json> 比较。
+
+报告将自动检查与人工语义复核分开：工具回执/状态/记录变化可程序判定，回答是否合适、记忆是否失真仍为 needs_review。模型或存储错误标为未判定，不伪装成通过。退出码 0 不代表整体质量或生产验收通过。完整命令、隔离与报告说明见 [评估使用说明](apps/agent/evals/README.md)，实现与首轮验证见 [迭代记录](docs/iterations/behavior-evaluation.md)。
 
 ## 补充信息表单与生成式 UI
 

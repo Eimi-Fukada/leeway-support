@@ -12,6 +12,7 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "test:postgres": "pnpm --filter @leeway-support/agent test:postgres",
+    "eval:behavior": "pnpm --filter @leeway-support/agent eval:behavior",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

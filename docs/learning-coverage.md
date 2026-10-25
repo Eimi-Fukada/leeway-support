@@ -100,6 +100,8 @@
 
 ## 下一小步
 
+2026-10-25：已加入 [客服行为评估](iterations/behavior-evaluation.md)：24 个真实模型场景、同一产品 Agent/PostgreSQL 服务、隔离清理、自动检查与待人工语义复核、本地报告和基线比较。首次全量 22 自动通过/2 摘要断言失败，修正断言后仅对这两例定向复测通过；未宣称修正后重新全量通过。命令与边界见 apps/agent/evals/README.md。
+
 2026-10-25：已在原表单链路加入 G3 interrupt/resume，等待/完成明确区分，提交和取消都恢复原流程，主逻辑任务预算不重置。原表单读取、UI 与身份隔离复用，新增刷新等待态恢复与跨进程测试，详见 [迭代](iterations/information-interrupt.md)。后续再按真实问题选择审批、人工接管或交互质量评估，不把本轮当成真实业务写入授权。
 
 2026-10-24：已按 [设计](support-interaction-design.md)实现补资料工具/CLI、现有 Agent 的本地服务适配与 CopilotKit 表单提交闭环，详见 [实现记录](iterations/information-ui.md)。可信 ID/状态由程序生成，不把表单填写当作业务操作授权。下一切片可增加已有记忆工具结果卡片或根据真实使用补充质量评估；不自动扩展图表和业务操作。

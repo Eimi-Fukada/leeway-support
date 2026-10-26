@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @leeway-support/agent dev",
     "start": "pnpm --filter @leeway-support/agent start",
     "ui": "pnpm --filter @leeway-support/agent ui",
+    "ui:start": "pnpm --filter @leeway-support/agent ui:start",
     "build": "turbo run build",
     "test": "turbo run test",
     "test:postgres": "pnpm --filter @leeway-support/agent test:postgres",

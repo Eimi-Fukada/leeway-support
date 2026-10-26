@@ -18,7 +18,12 @@ async function receiver(status = 200, infoDelayMs = 0) {
       return;
     }
     const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    try { for await (const chunk of req) chunks.push(Buffer.from(chunk)); }
+    catch (cause) {
+      // 超时测试允许客户端在正文读取期间断开；不能让预期中断变成接收端未处理异常。
+      if (req.aborted) return;
+      throw cause;
+    }
     const body = Buffer.concat(chunks).toString();
     // /info 超时后 SDK 可能退回 multipart；此类测试只检查传输，不解析其正文。
     batches.push(req.headers["content-type"]?.includes("multipart/") ? {} : JSON.parse(body));

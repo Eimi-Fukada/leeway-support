@@ -1,15 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type pg from "pg";
+import pg from "pg";
 import { informationSpecSchema, submissionSchema, InformationError, validateAnswers, type InformationForm, type InformationSpec, type InformationSubmission, type InformationReply } from "./contracts.ts";
 import { redactPii } from "../agent/middleware/pii.ts";
 
-export interface SupportRunResult { answer: string; elapsedMs: number; runId: string; status: "completed" | "waiting_for_input"; information?: InformationForm }
+export interface SupportRunResult { answer: string; elapsedMs: number; runId: string; status: "completed" | "waiting_for_input"; information?: InformationForm; reconciled?: boolean }
 // 执行层依赖这些能力；测试可注入无数据库实现，真实入口始终使用 PostgreSQL。
-export type InformationBackend = Pick<InformationService, "withThread" | "begin" | "create" | "finish" | "get" | "accept" | "record" | "wait" | "replay">;
+export type InformationBackend = Pick<InformationService, "withThread" | "begin" | "create" | "finish" | "get" | "accept" | "record" | "wait" | "replay" | "confirm">;
 interface Row { id: string; scope: string; thread_id: string; run_id: string; tool_call_id: string;
   spec: InformationSpec; status: InformationForm["status"]; expires_at: Date;
   submission_id: string | null; submission_hash: string | null; result: SupportRunResult | null; interrupt_id: string | null }
+
+// 锁连接不占用业务池；同一业务池的锁连接并发有界，包含正在连接的请求。
+const activeLocks = new WeakMap<pg.Pool, number>();
 
 // 表单是产品交互记录，和模型 messages/checkpoint 分开；同一会话锁覆盖校验、提交及执行。
 export class InformationService {
@@ -30,20 +33,31 @@ export class InformationService {
   }
 
   async withThread<T>(scope: string, threadId: string, work: () => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
+    const active = activeLocks.get(this.pool) ?? 0;
+    if (active >= (this.pool.options.max ?? 5)) throw new InformationError("服务正在处理其他会话，并发已满，请稍后再试。");
+    activeLocks.set(this.pool, active + 1);
+    // session advisory lock 必须保持同一物理连接；短生命周期专用连接避免内部 query 再次申请被占满的业务池。
+    const client = new pg.Client(this.pool.options);
     const lock = `${scope}:${threadId}`;
     let held = false;
+    let lockLost = false;
+    client.on("error", () => { lockLost = true; });
     try {
+      await client.connect();
       const result = await client.query("SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS held", [lock]);
       held = result.rows[0].held;
       if (!held) throw new InformationError("当前会话正在处理，请稍后再试。");
-      return await work();
+      const value = await work();
+      if (lockLost) throw new InformationError("会话锁连接异常，执行结果需核对；不会自动重试。");
+      return value;
     } finally {
-      // 解锁失败时销毁连接，避免把持锁连接放回池中。
-      let destroy = false;
+      // 专用连接总是关闭，解锁失败也不将持锁连接交还业务池。
       try { if (held) await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [lock]); }
-      catch { destroy = true; throw new InformationError("会话连接异常，请新建会话。"); }
-      finally { client.release(destroy); }
+      catch { throw new InformationError("会话锁连接异常，执行结果需核对。"); }
+      finally {
+        try { await client.end(); }
+        finally { activeLocks.set(this.pool, (activeLocks.get(this.pool) ?? 1) - 1); }
+      }
     }
   }
 
@@ -136,6 +150,13 @@ export class InformationService {
       WHERE id=$1 AND scope=$2 AND thread_id=$3 AND submission_id=$4 AND status='submitted'`,
     [submission.formId, scope, threadId, submission.submissionId, result]);
     if (!recorded.rowCount) throw new InformationError("执行结果未能确认保存；不会自动重复恢复。");
+  }
+
+  // 由请求完成回执对账；不需要恢复答案原文，也不再执行 Graph。
+  async confirm(scope: string, threadId: string, submissionId: string, result: SupportRunResult) {
+    await this.pool.query(`UPDATE public.support_information_forms SET result=$4
+      WHERE scope=$1 AND thread_id=$2 AND submission_id::text=$3 AND run_id=$5 AND status='submitted' AND result IS NULL`,
+    [scope, threadId, submissionId, result, result.runId]);
   }
 
   private async read(scope: string, threadId: string, id: string): Promise<Row> {

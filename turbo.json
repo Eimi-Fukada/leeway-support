@@ -1,12 +1,12 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
-    "build": { "outputs": ["dist/**"] },
+    "build": { "outputs": [".next/**", "!.next/cache/**"], "env": ["NEXT_TELEMETRY_DISABLED"] },
     "test": {
       "cache": false
     },
     "typecheck": {
-      "outputs": []
+      "outputs": [".next/types/**", "next-env.d.ts"]
     }
   }
 }

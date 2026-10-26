@@ -9,6 +9,10 @@ import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager
 import { createSupportAgent } from "../src/agent/agent.ts";
 import { runSupportAgent } from "../src/agent/run.ts";
 import { redactPii } from "../src/agent/middleware/pii.ts";
+import { MemoryService } from "../src/memory/service.ts";
+import { TestMemoryRepository } from "./fixtures/memory-repository.ts";
+import { TestInformationBackend } from "./fixtures/information-backend.ts";
+import { localSupportContext } from "../src/support-context.ts";
 
 const sensitive = "邮箱 grace@example.com 手机 +86 13800138000 卡号 4111 1111 1111 1111";
 const redacted = "邮箱 [REDACTED_EMAIL] 手机 [REDACTED_CN_PHONE] 卡号 [REDACTED_CREDIT_CARD]";
@@ -125,4 +129,24 @@ test("并行运行的流进度互相隔离，一个会话输出不阻止另一�
   assert.ok(other);
   assert.equal((await other).answer, "另一个会话成功");
   assert.equal(second.calls.length, 2);
+});
+
+test("生产装配记忆和补资料后，主模型 503 仍重试一次且记忆只读取一次", async () => {
+  const repository = new TestMemoryRepository(); let reads = 0;
+  const originalList = repository.list.bind(repository);
+  repository.list = async (scope) => { reads++; return originalList(scope); };
+  const model = fakeModel().respond(Object.assign(new Error("temporary"), { status: 503 })).respond(new AIMessage("恢复成功"));
+  const information = new TestInformationBackend();
+  const agent = createSupportAgent(model, new MemorySaver(), {}, {}, new MemoryService(repository), information);
+  const result = await runSupportAgent(agent, "问题", undefined, "full-assembly", localSupportContext("retry-audit"), { service: information });
+  assert.equal(result.answer, "恢复成功"); assert.equal(model.calls.length, 2); assert.equal(reads, 1);
+});
+
+test("生产装配的记忆存储故障不被主模型重试器重试，也不触发模型", async () => {
+  const repository = new TestMemoryRepository(); let reads = 0;
+  repository.list = async () => { reads++; throw Object.assign(new Error("storage unavailable"), { status: 503 }); };
+  const information = new TestInformationBackend(); const model = fakeModel();
+  const agent = createSupportAgent(model, new MemorySaver(), {}, {}, new MemoryService(repository), information);
+  await assert.rejects(runSupportAgent(agent, "问题", undefined, "failed-storage", localSupportContext("retry-audit"), { service: information }), /长期记忆读取失败/);
+  assert.equal(model.calls.length, 0); assert.equal(reads, 1);
 });

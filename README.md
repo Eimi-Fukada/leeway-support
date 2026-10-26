@@ -1,13 +1,13 @@
 # Leeway Support
 
-逐步建设的智能客服系统，当前支持多轮流式对话、PostgreSQL checkpoint、身份上下文隔离、模型自主选择的长期记忆工具及离线流程测试。业务工具和 RAG 尚未接入。
+逐步建设的智能客服系统，Web 页面和 API 由同一个 Next.js 应用承载，当前支持多轮流式对话、PostgreSQL checkpoint、身份上下文隔离、模型自主选择的长期记忆工具及离线流程测试。业务工具和 RAG 尚未接入。
 
 开发遵守 [小步迭代约定](AGENTS.md)，每项功能先说明解决的问题、主流实现方式和替代方案，再给出调用链与验证结果。[学习覆盖表](docs/learning-coverage.md) 连接本项目与 agent-practice 的已有实验及待补知识点，实验根目录按约定在两个候选路径中检查；[细粒度路线图](docs/agent-development-roadmap.md) 规定推进顺序。
 
 ## 环境与安装
 
-- Node.js >= 22.16.0（本地已验证 22.16.0）
-- Corepack（本地已验证 0.34.7），使用 packageManager 固定的 pnpm 10.33.4
+- Node.js >= 22.16.0（本轮验证 24.13.0）
+- Corepack，使用 packageManager 固定的 pnpm 12.15.0
 
 在仓库根目录执行：
 
@@ -20,6 +20,13 @@ pnpm install
 ## 运行
 
 ```sh
+# Next Web 开发服务，页面与 API 一起启动；打开 http://127.0.0.1:3100
+pnpm ui -- --user alice
+
+# 构建并运行同一个 Next 生产服务，无需另外启动后端
+pnpm build
+pnpm ui:start -- --user alice
+
 # 启动开发模式；修改源码会重启，已提交 checkpoint 保留，新启动默认创建新会话
 pnpm dev -- --user alice
 
@@ -61,7 +68,7 @@ OPENAI_API_MODE=responses
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/agent-support
 ```
 
-模型服务必须兼容所选接口；不根据模型名称猜测接口模式。入口静态导入 `createModel`，在 main 中调用后才使用共享 env.ts 中的 Node 内置 `loadEnvFile` 加载文件、校验配置并创建模型；导入模块本身不执行这些操作。环境文件相对 env.ts 定位，运行环境已有的同名变量优先。配置错误在 main 执行期间抛出，进入 main().catch 的统一处理。dev/start 通过 pnpm 直接启动应用，继承运行环境，不经过任务缓存。
+模型服务必须兼容所选接口；不根据模型名称猜测接口模式。CLI 在 main 中创建模型时由 env.ts 定位应用 .env，运行环境已有值优先。Next 使用框架自己的应用环境加载；服务端资源在首次有效 API 请求时初始化，不在构建中连接数据库或调用模型。Web 的 getSupportRuntime 跨路由和开发热更新复用初始化 Promise，失败时清理已创建资源并允许下次重新初始化。密钥均为服务端变量，不使用 NEXT_PUBLIC_ 前缀。
 
 启动后等待输入，不自动发送固定问题。可连续追问（以下回答内容以实际模型为准）：
 
@@ -138,7 +145,7 @@ const SUMMARY_CONFIG = {
 
 计数沿用当前框架 `countTokensApproximately` 的字符估算，不是精确 tokenizer；中文、工具、多模态、系统提示词和模型输出预留需后续按供应商校准。6000 是可调整的初始应用预算，不是该模型窗口已验证的结论。当前若消息估算超过 16000，在摘要调用前拒绝处理，避免默认截取一部分旧历史再总结；单条超长输入也可能触发此拒绝。最近保留消息无法压缩时不保证落到阈值以下。
 
-压缩改变最新会话 messages，旧原文仍在此前的数据库 checkpoint，未删除旧表记录；跨进程恢复使用最新摘要状态。checkpoint 不是专门的聊天档案，未来清理历史时要另定原文保留政策。失败/未完成会话仍不自动重试。
+压缩改变最新会话 messages，旧原文仍在此前的数据库 checkpoint，未删除旧表记录；跨进程恢复使用最新摘要状态。用户可见历史现在另存于消息档案，不从最新 checkpoint 拼回；摘要不会删除该档案。数据保留/清理政策仍待独立制定，失败/未完成会话仍不自动重试。
 
 取舍、测试和供应商验证见 [摘要迭代记录](docs/iterations/conversation-summary.md)。启动方式仍是 `pnpm start -- --user alice --debug`。调低触发阈值可以检查触发行为，但会增加调用次数；不要把低阈值测试配置当成生产容量结论。
 
@@ -172,7 +179,7 @@ endpoint 必须与 LangSmith 账号区域一致。截图中的新版 Agent 工�
 
 ## 中间件装配与输入 PII
 
-`agent/agent.ts` 显式装配 `模型调用限制 → PII → 摘要 → 主模型重试 → 工具调用限制`，各实现放在 `agent/middleware/`，不自动扫描。数组顺序不等于所有 hook 都同方向执行：模型限制在 beforeModel 先检查，工具限制在 afterModel、工具执行前检查。数据库与追踪配置继续放在 config。
+`agent/agent.ts` 显式装配 `模型调用限制 → PII → 摘要 → 长期记忆（启用时）→ 主模型重试 → 补资料约束（启用时）→ 工具调用限制 → 完成回执（启用时）`，通用实现放在 `agent/middleware/`，记忆、补资料和回执实现随各自模块，不自动扫描。数组顺序不等于所有 hook 都同方向执行：模型限制在 beforeModel 先检查，工具限制在 afterModel、工具执行前检查。长期记忆 wrapModelCall 位于重试器外层，每个模型步骤只读一次记忆；只重试符合条件的主模型故障，不重试记忆存储。数据库与追踪配置继续放在 config。
 
 默认循环预算如下，均采用 `exitBehavior: "error"`，超限停止，不注入成功回答：
 
@@ -234,8 +241,24 @@ CLI 使用 `--user alice` 构造 local-development/local-cli/support/alice。对
 
 ```text
 apps/agent/
+  app/                  Next App Router
+    page.tsx            客服调试页面
+    layout.tsx          页面元数据与全局样式
+    api/
+      session/route.ts   当前服务端开发身份
+      conversation/route.ts 历史与状态核对
+      information/[id]/route.ts 表单状态
+      copilotkit/[[...path]]/route.ts AG-UI 流与恢复协议
+  components/           客户端聊天与表单组件
+  scripts/ui.mjs        启动官方 Next CLI，传入开发身份
+  next.config.ts        Next 配置与服务端 SDK 外部依赖
   src/
-    index.ts            应用启动、依赖装配与退出清理
+    index.ts            CLI 启动、依赖装配与退出清理
+    server/
+      runtime.ts        Web 服务端资源与 CopilotKit Fetch handler
+      context.ts        服务端开发身份
+      request.ts        本机同源限制与禁止缓存的 JSON 响应
+    ui/adapter.ts       已有 Agent 到 AG-UI 的事件适配
     agent/
       agent.ts          Agent 定义，接收模型与 checkpointer
       run.ts            单轮 stream 执行、事件投影与最终结果校验
@@ -259,14 +282,21 @@ apps/agent/
       agent.ts          记忆策略、工具及临时上下文注入
       service.ts        来源/PII/身份校验与存储接口
       postgres.ts       事务、版本与幂等的 PostgreSQL 实现
+    conversations/
+      contracts.ts      可见消息/请求状态投影
+      service.ts        独立消息档案与请求事务
+      receipt.ts        Graph 正常完成回执
+      execution.ts      幂等准入、只读核对与快照
   tests/agent.test.ts    fakeModel 流程测试：输入、结束、运行隔离、错误传播
   tests/cli-debug.test.ts 调试展示的成功、失败、断流和输出范围测试
   tests/cli-run.test.ts  正常流式路径、完成前输出、最终结果和失败测试
   tests/chat.test.ts     连续输入、命令、失败停止与 EOF
   tests/memory.test.ts   多轮历史、隔离、checkpoint 生命周期与失败状态
   tests/postgres.integration.ts 真实数据库、跨进程恢复与连接失败验证
+  tests/conversation.test.ts 归档、幂等、未知结果与隔离
+  tests/conversation.postgres.ts 真实请求事务、并发及跨进程对账
   package.json           Agent 自己的命令和依赖
-  tsconfig.json          Agent 的 TypeScript 配置
+  tsconfig.json          Next 与现有 Agent/测试的 TypeScript 配置
 docs/                    技术方案和调研记录
 package.json             根命令、pnpm 版本、Turbo 依赖
 pnpm-workspace.yaml      声明哪些目录是工作区包
@@ -306,6 +336,24 @@ API 参考：[LangChain Agent](https://docs.langchain.com/oss/javascript/langcha
 
 长期目标见 [技术方案](docs/technical-proposal.md)，其中的目录是目标规划，当前实现范围以本 README 为准。
 
+## 会话历史、请求幂等与结果核对
+
+界面刷新会恢复当前身份/会话的已归档用户消息、最终客服回答和等待表单，读取不会执行模型或工具。存储独立于 checkpoint：public.support_conversation_messages 保存用户可见历史，public.support_conversation_requests 保存请求状态与回执。两张表启动时在产品 public schema 初始化；不新增数据库。临时模型片段、摘要内部消息、系统提示词和记忆工具 JSON 不进入聊天档案；补资料记录为可读问题/答案摘要。
+
+每条普通消息以稳定的用户消息 ID 为请求标识；表单恢复使用 submissionId。相同身份、会话、ID 和内容重放已保存结果，不重复运行；同 ID 不同原始内容拒绝，即使输入脱敏后相同也不能冒用。身份仍由服务端提供，thread/请求 ID 不授予访问权限。同会话使用现有 PostgreSQL advisory lock 拒绝并发执行，消息及请求接受、完成结果及客服回答分别事务写入。
+
+会话锁使用短生命周期专用连接，不占用内部读写所需的业务池；同一个业务池共享锁连接并发上限（当前 5），超限立即拒绝，结束后关闭连接并释放名额。请求账本保存 message/resume 类型：恢复请求不能用原逻辑任务的旧 interrupt 证明本次提交已执行。启动自动补充 request_kind，已有记录为 legacy；缺少匹配完成证据时保守标记 unknown。
+
+页面展示 empty/running/waiting_for_input/completed/failed/unknown，并提供“核对状态”和逐次处理记录。running 状态的查询只读取档案，不与执行抢锁；锁释放后的核对只比较 checkpoint 的匹配完成回执或合法暂停点。若 Graph 已完成而档案尚未写入，可补齐最终回答；表单提交的完成账本也可据此补齐。没有证据就保留 unknown，不重试模型、不重复工具、不猜测成功；failed/unknown 会话禁止继续提交新任务，可核对状态或显式新建会话。已提交副作用不因此回滚。
+
+尚未接收的普通消息在本标签页 sessionStorage 临时保留原 ID/内容；刷新后先核对服务器，只有确认尚未接收且会话可用时提供手动“重发原消息”。不自动重发，不为重试生成新 ID。该暂存并非服务器已接收证明，也不是离线消息队列；关闭标签页后可能丢失。表单 submissionId 同样在该标签页刷新间复用。
+
+旧 checkpoint 没有独立消息档案时，明确提示历史不完整，不猜造旧消息或自动迁移敏感内部状态。当前恢复的是已经保存的最终消息，不重放流式片段；早期失败前已经显示的半截文字不会被存成成功回答。核对重建的结果标记 reconciled=true，elapsedMs=0 仅为旧契约占位，原耗时未知，CLI 不将它显示为真实耗时。
+
+当前 GET /api/conversation 返回只读投影及等待状态（必要时按 checkpoint 修复记录），浏览器不上传 system、工具或历史作为事实源。恢复表单仍需用户明确提交或取消。“新会话”只换 thread，不删除档案、记忆或其他执行结果。未实现全会话列表、分页、完整事件日志、失败步骤自动恢复、生产认证或聊天档案删除政策。机制与验证见 [迭代说明](docs/iterations/conversation-history-idempotency.md)。
+
+等待表单读取失败会明确返回状态不可用，页面提示核对并禁止普通输入；只有核对成功且会话为 empty/completed 才允许普通消息。并发、恢复证据、中间件顺序及表单故障的修复记录见 [运行可靠性修复](docs/iterations/runtime-reliability-fixes.md)。
+
 ## 客服行为回归评估
 
 已加入 24 个真实模型行为场景，覆盖普通问答、澄清、表单暂停/提交/取消、长期记忆、用户隔离、PII 和摘要。使用同一产品 Agent 和 PostgreSQL 服务，每个样本自动分配隔离测试身份，结束后清理自己的记录；不另建演示数据库。
@@ -326,12 +374,14 @@ corepack pnpm ui -- --user alice
 
 表单现在复用原链路进行持久暂停：request_information 创建幂等表单后调用 interrupt，Graph 保存 checkpoint，返回 waiting_for_input，不继续主模型回答，也不报告逻辑任务完成。服务端验证身份、thread、表单、interrupt ID、有效期及答案后，用 Command.resume 恢复原工具；答案以 ToolMessage 回到模型，取消也走同一条恢复链路。重复已完成提交只重放持久结果，不重复恢复或调用模型。
 
-等待期间聊天输入框禁用，服务端拒绝用普通新问题绕过暂停。浏览器按开发身份保存逻辑 thread ID，刷新后重新读取服务器等待状态并显示同一份表单；这不是完整的聊天历史重放或运行中断线重连。关闭页面时如果正在生成仍沿用原有取消策略；已经暂停时不占着请求或会话锁等待用户。表单默认 30 分钟过期，过期/未知/失败状态不能自动续跑，可新建会话；旧版本没有 interrupt ID 的表单也不自动恢复。
+等待期间聊天输入框禁用，服务端拒绝用普通新问题绕过暂停。浏览器按开发身份保存逻辑 thread ID，刷新后读取当前身份的消息档案和等待状态，显示同一份表单；不自动续跑运行中断线任务。关闭页面时如果正在生成仍沿用原有取消策略；已经暂停时不占着请求或会话锁等待用户。表单默认 30 分钟过期，过期/未知/失败状态不能自动续跑，可新建会话；旧版本没有 interrupt ID 的表单也不自动恢复。
 
 CLI 等待时使用 `/submit {"字段key":"答案"}` 或 `/cancel`，字段 key/选择值在终端打印；--thread 也可恢复等待表单。取消表示用户放弃该次补资料，Agent 可解释信息不足，不等于业务操作回滚。正常完成才清空 run 预算，等待/恢复沿用原逻辑任务计数。
 
-产品表 `public.support_information_forms` 启动时自动补充 interrupt_id 列；表单归属、状态和幂等由程序管理，不由模型生成。创建以原逻辑 run/toolCall 幂等，恢复重进工具不会重复建表单；一项逻辑任务最多一份，不支持把补资料和其他工具并行调用。模型配置继续使用 apps/agent/.env，无新增环境变量。
+产品表 `public.support_information_forms` 初始化服务时自动补充 interrupt_id 列；表单归属、状态和幂等由程序管理，不由模型生成。创建以原逻辑 run/toolCall 幂等，恢复重进工具不会重复建表单；一项逻辑任务最多一份，不支持把补资料和其他工具并行调用。模型配置继续使用 apps/agent/.env；Web 启动器将 --user 写入服务端 SUPPORT_DEV_USER，不接受浏览器设置身份。
 
 调用链：Copilot Runtime → 原 runSupportAgent → request_information → interrupt/checkpoint → 同一 InformationForm 组件 → 服务端校验 → Command.resume → 原工具返回答案/取消 → 主模型继续。AG-UI 以 RUN_FINISHED.outcome=interrupt 区分网络执行结束与任务成功，客户端提交携带匹配的 resume 描述，但真实 Graph resume 值始终由服务端重建。契约在 src/interactions/contracts.ts。
 
-开发入口仅监听本机，不具备业务登录或正式 SDK；“新会话”按钮换 thread，长期记忆保留。corepack pnpm build 验证客户端构建，ui 命令仍运行 Vite 开发服务。原始表单实现见 [历史记录](docs/iterations/information-ui.md)，当前暂停/恢复的契约、限制与验证见 [持久补资料流程](docs/iterations/information-interrupt.md)。
+开发与生产调试入口均监听 127.0.0.1:3100，并校验 API Host/Origin；不具备业务登录或正式 SDK。“新会话”只换 thread，长期记忆保留。corepack pnpm ui 运行 Next 开发服务；corepack pnpm build 构建页面和 API，corepack pnpm ui:start 启动同一个 Next 生产服务，不另部署后端。直接使用 Next CLI 时需在服务端配置 SUPPORT_DEV_USER，并使用相同监听地址/端口；生产业务认证仍另行接入。Web Agent 资源跨热更新复用，修改服务端 Agent 装配/配置后需重启 Web 服务。
+
+迁移机制与验证见 [Next.js 迁移](docs/iterations/next-migration.md)。原始表单实现见 [历史记录](docs/iterations/information-ui.md)，当前暂停/恢复见 [持久补资料流程](docs/iterations/information-interrupt.md)。

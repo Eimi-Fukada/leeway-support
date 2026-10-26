@@ -26,6 +26,7 @@ import {
   informationTool,
   informationMiddleware,
 } from "../interactions/agent.ts";
+import { conversationReceiptMiddleware } from "../conversations/receipt.ts";
 
 export interface CallLimits {
   model?: ModelCallLimits;
@@ -58,10 +59,12 @@ export function createSupportAgent(
       createModelCallLimitMiddleware(limits.model),
       createPiiMiddleware(),
       createSummaryMiddleware(model, summary),
-      createModelRetryMiddleware(),
       ...(memory ? [createMemoryMiddleware(memory)] : []),
+      // wrapModelCall 从外向内：先读记忆，再仅对主模型调用重试；避免重试器收到记忆层包装后的异常。
+      createModelRetryMiddleware(),
       ...(information ? [informationMiddleware()] : []),
       createToolCallLimitMiddleware(limits.tool),
+      ...(information ? [conversationReceiptMiddleware()] : []),
     ],
     systemPrompt:
       "你是 Leeway Support 的智能客服助手，使用简洁的中文回答。" +

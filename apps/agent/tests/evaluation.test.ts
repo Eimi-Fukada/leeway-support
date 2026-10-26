@@ -11,6 +11,7 @@ import { compareReports, markdownReport, sanitizeArtifact, type BehaviorReport }
 import { MemoryService } from "../src/memory/service.ts";
 import { TestMemoryRepository } from "./fixtures/memory-repository.ts";
 import { TestInformationBackend } from "./fixtures/information-backend.ts";
+import { TestConversationBackend } from "./fixtures/conversation-backend.ts";
 
 function services() {
   const repository = new TestMemoryRepository();
@@ -159,4 +160,13 @@ test("摘要在第二轮提前触发也满足场景要求，不强制第三轮�
   assert.equal(result.steps[2]!.attempts.filter((entry) => entry.kind === "summary").length, 0);
   assert.equal(result.automatic, "pass");
   assert.equal(result.semantic, "needs_review");
+});
+
+test("评估可沿生产档案入口运行，检查标准仍不进入模型且观测不写新请求", async () => {
+  const fixture = services();
+  const conversation = new TestConversationBackend();
+  fixture.environment.conversation = conversation;
+  const result = await runCase(behaviorCases[0]!, 1, fakeModel().respond(new AIMessage("你好")), fixture.environment);
+  assert.equal(result.automatic, "pass");
+  assert.equal(conversation.records.size, 1);
 });

@@ -5,7 +5,7 @@ import { redactPii } from "../agent/middleware/pii.ts";
 
 // 显式 Client + callback：配置、上传策略和关闭过程集中在这里，Agent 不依赖云服务。
 export function createTracing(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Record<string, string | undefined>> = process.env,
   send: typeof fetch = fetch,
 ) {
   const enabled = env.LANGSMITH_TRACING?.trim() === "true";

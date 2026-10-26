@@ -5,6 +5,9 @@ import { checkpointThreadId, type SupportContext } from "../support-context.ts";
 import type { InformationBackend } from "../interactions/service.ts";
 import { informationPause } from "../interactions/pause.ts";
 import { InformationError, type InformationForm, type InformationSubmission } from "../interactions/contracts.ts";
+import type { ConversationBackend } from "../conversations/service.ts";
+import { conversationSnapshot } from "../conversations/execution.ts";
+import { memoryScope, validateSupportContext } from "../support-context.ts";
 
 // 本文件按“启动参数 → 会话循环 → 单轮展示”组织，终端交互只需在这里阅读。
 export function parseCliOptions(args: string[]): { debug: boolean; threadId?: string; userId?: string } {
@@ -42,6 +45,7 @@ export async function chat(
   resumeThreadId?: string,
   context?: SupportContext,
   information?: InformationBackend,
+  conversation?: ConversationBackend,
 ): Promise<void> {
   let threadId = resumeThreadId ?? randomUUID();
   let pending: InformationForm | undefined;
@@ -54,6 +58,13 @@ export async function chat(
       throw new Error("会话恢复失败：存在未完成步骤，本轮不自动重试，请使用新会话。");
     }
     write("[已恢复会话] 后续问题将使用已保存的历史。\n");
+    if (conversation && information) {
+      const savedThread = checkpointThreadId(threadId, context);
+      const scope = memoryScope(validateSupportContext(context));
+      const snapshot = await information.withThread(scope, savedThread, () => conversationSnapshot(agent, information, conversation, scope, savedThread, true));
+      for (const message of snapshot.messages) write(`[历史${message.role === "user" ? "用户" : "客服"}] ${message.content}\n`);
+      if (snapshot.notice) write(`[状态] ${snapshot.notice}\n`);
+    }
     if (pause && information) {
       pending = (await runSupportAgent(agent, "", undefined, threadId, context, { service: information, restore: true })).information;
     }
@@ -76,7 +87,7 @@ export async function chat(
         const answers = question === "/cancel" ? {} : JSON.parse(question.slice(8));
         const submission = { formId: pending.formId, formVersion: pending.formVersion, interruptId: pending.interruptId!,
           submissionId: randomUUID(), cancelled: question === "/cancel", answers };
-        pending = (await runSupportCli(agent, "", write, debug, threadId, context, information, submission)).information;
+        pending = (await runSupportCli(agent, "", write, debug, threadId, context, information, submission, conversation)).information;
       } catch (error) {
         if (error instanceof SyntaxError) write('[提示] 请使用 /submit {"字段key":"答案"} 提交 JSON。\n');
         else throw error;
@@ -86,7 +97,7 @@ export async function chat(
     } else if (question) {
       // 失败向上传播并终止输入循环，不自动提交下一行或重试失败轮次。
       if (pending) write("[等待] 请使用 /submit 提交表单答案或 /cancel 取消；不会启动新一轮。\n");
-      else pending = (await runSupportCli(agent, question, write, debug, threadId, context, information)).information;
+      else pending = (await runSupportCli(agent, question, write, debug, threadId, context, information, undefined, conversation)).information;
     }
     write("你> ");
   }
@@ -109,6 +120,7 @@ export async function runSupportCli(
   context?: SupportContext,
   information?: InformationBackend,
   submission?: InformationSubmission,
+  conversation?: ConversationBackend,
 ) {
   write(debug ? "[开始] Agent 流式执行\n" : "[客服] ");
   try {
@@ -119,7 +131,7 @@ export async function runSupportCli(
         // 节点更新不是节点开始，也不是网络请求次数。
         write(`[节点更新] ${event.node}\n`);
       }
-    }, threadId, context, information ? { service: information, submission } : undefined);
+    }, threadId, context, information ? { service: information, submission, conversation, requestId: submission?.submissionId ?? randomUUID() } : undefined);
     if (debug) {
       write(`[追踪ID] ${result.runId}\n`);
       if (result.status !== "waiting_for_input") write(`[最终回答] ${result.answer}\n`);
@@ -128,7 +140,7 @@ export async function runSupportCli(
     if (result.information) {
       printInformation(result.information, write);
     }
-    if (result.status !== "waiting_for_input") write(`[完成] 耗时 ${result.elapsedMs} ms\n`);
+    if (result.status !== "waiting_for_input") write(result.reconciled ? "[完成] 已核对持久结果；原耗时未知。\n" : `[完成] 耗时 ${result.elapsedMs} ms\n`);
     return result;
   } catch (error: unknown) {
     if (!debug) write("\n");

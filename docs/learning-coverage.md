@@ -25,7 +25,7 @@
 | 工具发现 D11–D12 | `llm-tool-selector-middleware.ts`、`provider-tool-search-middleware.ts` | 大工具集是否值得预筛；比较成本、漏选与提供商限制 |
 | 模拟、规划、文件 D13–D15 | `tool-emulator-middleware.ts`、`todo-list-middleware.ts`、`filesystem-middleware.ts` | 区分模拟证据、计划和完成事实；文件能力只在受控实验/运行环境使用 |
 | 流式消息、界面与嵌入 E | `apps/support-chat/basic-chat/`、`generative-ui/`、`ai-elements/`、`apps/copilotkit-demo/` | 已接本地 CopilotKit 聊天页、现有 Agent 的 AG-UI 适配和补资料表单提交；真实模型浏览器闭环通过，见 [实现记录](iterations/information-ui.md)。记忆结果卡片、宿主动作、业务授权、正式 SDK 和重连仍待实现 |
-| 并发、重连、分支与回放 F | `apps/support-chat/message-queues/`、`join-rejoin/`、`branching/`、`time-travel/`；待补多实例运行所有权实验 | 观察连接不启动新任务；跨用户隔离；回放不执行真实写操作 |
+| 并发、重连、分支与回放 F | `apps/support-chat/message-queues/`、`join-rejoin/`、`branching/`、`time-travel/` 供对照 | 已接独立可见消息档案、请求幂等、状态只读核对、刷新恢复与跨进程完成回执修复，见 [迭代](iterations/conversation-history-idempotency.md)。会话锁拒绝并发；运行中重连续流、分支和执行租约尚未实现 |
 | 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts` 作对照 | G3 补资料已在原产品中持久 interrupt/resume，支持填写/取消、刷新与跨进程恢复、表单幂等和预算连续；见 [迭代](iterations/information-interrupt.md)。业务写入审批、人工认领与接管未实现 |
 | 子 Agent / 并行 H | `subagent.ts`、`subagent-middleware.ts`、`apps/support-chat/openui/parallel/` | 诊断委派与上下文隔离；受限权限、总预算、超时及部分失败 |
 | 知识入库 I1–I3 | `检索策略.md` 为思路资料；待补 `labs/knowledge-ingestion/` | 文档解析、切块、原文定位、版本、发布撤回；上传不等于可检索 |
@@ -99,6 +99,12 @@
 三者各选一个最小例子分别实践；MCP 工具调用不自动实现持久事件消费。真实业务项目、首个事件名称和载荷尚未确定。
 
 ## 下一小步
+
+2026-10-26：已将现有 Web 迁移到 Next.js App Router，页面与四组 API 随一个 Next Node 服务运行，复用原 Agent/AG-UI/持久暂停和档案链路；移除 Vite 和手写 HTTP 路由。实验仓库未发现 Next 示例，本轮通过产品迁移覆盖服务端/客户端边界、Route Handlers、服务端资源复用和生产构建，见 [迭代](iterations/next-migration.md)。没有引入独立后端框架或新的 Agent 运行时，真实业务嵌入仍待实现。
+
+2026-10-25：完成现有执行链的四项 [可靠性修复](iterations/runtime-reliability-fixes.md)：锁连接与业务池隔离并限制并发；message/resume 证据分离；长期记忆包在主模型重试外层；表单读取失败显式报错且等待态禁止普通输入。确定性测试 120/120、真实 PostgreSQL 测试 21/21、类型检查与构建通过；本轮未请求真实模型或真实业务系统，不扩展新功能。
+
+2026-10-25：已按用户授权完成 A2/A3 的首个闭环：独立消息档案、刷新恢复、普通消息幂等、完成回执核对和 unknown 处置。不是从 checkpoint 伪造历史或自动重放失败 run；与既有表单恢复共用同一执行链路，见 [迭代](iterations/conversation-history-idempotency.md)。后续可以开始真实资料的最小知识入库/检索，身份交换与生产数据策略仍在业务接入前单独验收。
 
 2026-10-25：已加入 [客服行为评估](iterations/behavior-evaluation.md)：24 个真实模型场景、同一产品 Agent/PostgreSQL 服务、隔离清理、自动检查与待人工语义复核、本地报告和基线比较。首次全量 22 自动通过/2 摘要断言失败，修正断言后仅对这两例定向复测通过；未宣称修正后重新全量通过。命令与边界见 apps/agent/evals/README.md。
 

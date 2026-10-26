@@ -8,6 +8,8 @@ import { runSupportAgent } from "../agent/run.ts";
 import { InformationError, submissionSchema } from "../interactions/contracts.ts";
 import type { InformationBackend } from "../interactions/service.ts";
 import type { SupportContext } from "../support-context.ts";
+import type { ConversationBackend } from "../conversations/service.ts";
+import { ConversationError, requestIdSchema } from "../conversations/contracts.ts";
 
 const forwardedSchema = z.object({ informationSubmission: submissionSchema.optional() }).passthrough();
 
@@ -15,17 +17,18 @@ const forwardedSchema = z.object({ informationSubmission: submissionSchema.optio
 // CopilotKit 使用 AG-UI 观察当前轮；历史事实仍由服务端 checkpoint 提供。
 export class SupportUiAgent extends AbstractAgent {
   constructor(private readonly supportAgent: ReturnType<typeof createSupportAgent>,
-    private readonly information: InformationBackend, private readonly support: SupportContext) {
+    private readonly information: InformationBackend, private readonly support: SupportContext, private readonly conversation?: ConversationBackend) {
     super({ agentId: "support", description: "Leeway Support 客服" });
   }
 
-  clone() { return new SupportUiAgent(this.supportAgent, this.information, this.support); }
+  clone() { return new SupportUiAgent(this.supportAgent, this.information, this.support, this.conversation); }
 
   run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable((subscriber) => {
       const abort = new AbortController();
       const emit = (event: BaseEvent) => { if (!subscriber.closed) subscriber.next(event); };
-      const assistantId = randomUUID();
+      const requestId = input.forwardedProps?.informationSubmission?.submissionId ?? input.messages.at(-1)?.id;
+      const assistantId = typeof requestId === "string" ? `assistant-${requestId}` : randomUUID();
       let textStarted = false;
       void (async () => {
         try {
@@ -40,13 +43,14 @@ export class SupportUiAgent extends AbstractAgent {
           const latest = input.messages.at(-1);
           if (!latest || latest.role !== "user" || typeof latest.content !== "string" || !latest.content.trim() || latest.content.length > 12_000)
             throw new InformationError("请提交有效的问题。");
+          requestIdSchema.parse(requestId);
           emit({ type: EventType.RUN_STARTED, threadId: input.threadId, runId: input.runId });
           const result = await runSupportAgent(this.supportAgent, latest.content, (event) => {
             if (event.type !== "text") return;
             if (!textStarted) { emit({ type: EventType.TEXT_MESSAGE_START, messageId: assistantId, role: "assistant" }); textStarted = true; }
             emit({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: assistantId, delta: event.text });
           }, input.threadId, this.support, { service: this.information,
-            submission: forwarded.data.informationSubmission, signal: abort.signal });
+            submission: forwarded.data.informationSubmission, signal: abort.signal, conversation: this.conversation, requestId });
           if (!textStarted && result.status !== "waiting_for_input") {
             // 同一已完成提交的重放直接返回持久结果，不再调用模型。
             emit({ type: EventType.TEXT_MESSAGE_START, messageId: assistantId, role: "assistant" });
@@ -70,7 +74,7 @@ export class SupportUiAgent extends AbstractAgent {
           });
         } catch (cause) {
           if (textStarted) emit({ type: EventType.TEXT_MESSAGE_END, messageId: assistantId });
-          emit({ type: EventType.RUN_ERROR, message: cause instanceof InformationError ? cause.message
+          emit({ type: EventType.RUN_ERROR, message: cause instanceof InformationError || cause instanceof ConversationError ? cause.message
             : "本轮未完成；已收到的片段不能作为完整结果。请检查服务，失败执行不会自动重试。", code: "SUPPORT_RUN_FAILED" });
         } finally { subscriber.complete(); }
       })();

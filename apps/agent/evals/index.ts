@@ -9,6 +9,7 @@ import { createMemory } from "../src/config/memory.ts";
 import { createDatabasePool } from "../src/config/database.ts";
 import { createCheckpointer } from "../src/config/checkpoint.ts";
 import { InformationService } from "../src/interactions/service.ts";
+import { ConversationService } from "../src/conversations/service.ts";
 import { checkpointThreadId, memoryScope } from "../src/support-context.ts";
 import { behaviorCases, DATASET_VERSION } from "./dataset.ts";
 import { runCase, hash, type EvaluationServices } from "./runner.ts";
@@ -90,7 +91,8 @@ async function main() {
     const saver = await createCheckpointer(); closers.push(() => saver.end());
     const memory = await createMemory(); closers.push(() => memory.close());
     const information = new InformationService(pool); await information.setup();
-    const services: EvaluationServices = { saver, memory: memory.service, information,
+    const conversation = new ConversationService(pool); await conversation.setup();
+    const services: EvaluationServices = { saver, memory: memory.service, information, conversation,
       cleanup: async (contexts, threads) => {
         if (contexts.some((entry) => !/^eval-[0-9a-f-]{36}-[ab]$/.test(entry.subject.id))) throw new Error("拒绝清理非评估身份。");
         for (const thread of threads) {
@@ -99,6 +101,8 @@ async function main() {
         }
         for (const context of contexts) {
           const scope = memoryScope(context);
+          await pool.query("DELETE FROM public.support_conversation_messages WHERE scope=$1", [scope]);
+          await pool.query("DELETE FROM public.support_conversation_requests WHERE scope=$1", [scope]);
           await pool.query("DELETE FROM public.support_information_forms WHERE scope=$1", [scope]);
           await pool.query("DELETE FROM public.support_memory_operations WHERE scope=$1", [scope]);
           await pool.query("DELETE FROM public.support_memories WHERE scope=$1", [scope]);

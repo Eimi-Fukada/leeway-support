@@ -17,7 +17,7 @@ import type { InformationBackend } from "./service.ts";
 import { memoryScope, validateSupportContext } from "../support-context.ts";
 import type { SupportContext } from "../support-context.ts";
 
-export const interactionContextSchema = z.object({ runId: z.uuid() });
+export const interactionContextSchema = z.object({ runId: z.uuid(), requestId: z.string().optional() });
 
 export function informationTool(service: InformationBackend) {
   return tool(

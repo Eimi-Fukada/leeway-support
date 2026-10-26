@@ -1,6 +1,8 @@
 node_modules/
 .turbo/
 dist/
+.next/
+next-env.d.ts
 coverage/
 *.tsbuildinfo
 *.log
@@ -8,4 +10,6 @@ coverage/
 .env.*
 !.env.example
 .playwright-mcp
-/artifacts/evals/
+.playwright-cli/
+/output/playwright/
+/artifacts

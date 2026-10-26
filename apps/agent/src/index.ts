@@ -9,6 +9,7 @@ import { createMemory } from "./config/memory.ts";
 import { localSupportContext } from "./support-context.ts";
 import { createDatabasePool } from "./config/database.ts";
 import { InformationService } from "./interactions/service.ts";
+import { ConversationService } from "./conversations/service.ts";
 
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
@@ -26,6 +27,8 @@ async function main(): Promise<void> {
       memory = await createMemory();
       const information = new InformationService(interactionPool);
       await information.setup();
+      const conversation = new ConversationService(interactionPool);
+      await conversation.setup();
       const agent = createSupportAgent(model, checkpointer, {}, {}, memory.service, information).withConfig({ callbacks: tracing.callbacks });
       console.log(`[本地开发身份] ${options.userId}；未来业务入口必须在服务端完成认证后提供 SupportContext。`);
       if (tracing.enabled) console.log("[追踪] LangSmith 已启用；上传记录不代表云端已验收。");
@@ -34,7 +37,7 @@ async function main(): Promise<void> {
         await chat(agent, () => {
           lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
           return lines;
-        }, undefined, options.debug, options.threadId, context, information);
+        }, undefined, options.debug, options.threadId, context, information, conversation);
       } finally {
         lines?.close();
       }
@@ -53,7 +56,7 @@ main().catch((error: unknown) => {
   const visited = new Set<unknown>();
   while (current instanceof Error && !visited.has(current)) {
     visited.add(current);
-    if (current.name === "InformationError") {
+    if (current.name === "InformationError" || current.name === "ConversationError") {
       console.error("[agent]", current.message);
       process.exitCode = 1;
       return;

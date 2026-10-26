@@ -10,9 +10,11 @@ import { localSupportContext, type SupportContext } from "../src/support-context
 import type { BehaviorCase, BehaviorStep, CaseResult, StepEvidence } from "./contracts.ts";
 import { EvaluationRecorder } from "./recorder.ts";
 import { checkRules } from "./checks.ts";
+import type { ConversationBackend } from "../src/conversations/service.ts";
 
 export interface EvaluationServices {
   saver: BaseCheckpointSaver; memory: MemoryService; information: InformationBackend;
+  conversation?: ConversationBackend;
   cleanup(contexts: SupportContext[], threads: Array<{ context: SupportContext; id: string }>): Promise<void>;
 }
 export class ScenarioUnfulfilled extends Error {}
@@ -70,7 +72,7 @@ export async function runCase(definition: BehaviorCase, repetition: number, mode
         }
         evidence.result = await runSupportAgent(agent.withConfig({ callbacks: [recorder] }), step.kind === "message" ? step.text : "",
           (event) => { if (event.type === "text") evidence.streamedText += event.text; }, thread.id, thread.context,
-          { service: services.information, submission, restore: step.kind === "observe" });
+          { service: services.information, conversation: services.conversation, requestId: randomUUID(), submission, restore: step.kind === "observe" });
         evidence.memoryAfter = structuredClone(await services.memory.list(thread.context));
         if (evidence.result.information) pending.set(key, evidence.result.information);
         else pending.delete(key);

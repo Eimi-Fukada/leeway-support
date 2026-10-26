@@ -5,22 +5,21 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "ui": "tsx src/ui/server.ts",
-    "build": "vite build",
+    "ui": "node scripts/ui.mjs",
+    "ui:start": "node scripts/ui.mjs --production",
+    "build": "next build",
     "test": "tsx --import ./tests/setup.ts --test tests/*.test.ts",
-    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts",
+    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts tests/conversation.postgres.ts",
     "eval:behavior": "tsx evals/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.2",
     "tsx": "4.23.15",
-    "typescript": "7.0.2",
-    "vite": "8.3.4"
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@ag-ui/client": "1.0.2",
@@ -33,10 +32,12 @@
     "@langchain/openai": "1.6.3",
     "langchain": "1.5.18",
     "langsmith": "0.11.0",
+    "next": "16.4.3",
     "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "rxjs": "7.8.1",
+    "server-only": "0.0.1",
     "zod": "4.6.7"
   }
 }

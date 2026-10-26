@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { useAgent, useCopilotKit } from "@copilotkit/react-core/v2";
 import {
@@ -13,7 +15,13 @@ export function InformationForm({ form, onResolved }: { form: Form; onResolved?:
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
-  const [submissionId] = useState(() => crypto.randomUUID());
+  const [submissionId] = useState(() => {
+    const key = `support-submission:${form.formId}`;
+    const saved = sessionStorage.getItem(key);
+    const id = saved ?? crypto.randomUUID();
+    sessionStorage.setItem(key, id);
+    return id;
+  });
   // 执行新一轮后重新核对服务端状态；历史卡片不能继续提交。
   useEffect(() => {
     const abort = new AbortController();

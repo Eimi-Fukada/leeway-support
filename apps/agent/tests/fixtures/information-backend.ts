@@ -54,4 +54,7 @@ export class TestInformationBackend implements InformationBackend {
     return { resume: { formId: form.formId, submissionId: submission.submissionId, cancelled: !!submission.cancelled, answers } };
   }
   async record(_scope: string, _thread: string, submission: InformationSubmission, result: SupportRunResult) { this.results.set(submission.formId, result); }
+  async confirm(_scope: string, _thread: string, submissionId: string, result: SupportRunResult) {
+    for (const [formId, submission] of this.submissions) if (submission.submissionId === submissionId && !this.results.has(formId)) this.results.set(formId, result);
+  }
 }

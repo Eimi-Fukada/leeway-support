@@ -6,6 +6,8 @@
 
 ## 推进方式
 
+2026-10-26 实现补充：Web 已迁移至 Next.js，页面与 API 共同构建和启动；Agent、数据库、流式协议与持久状态职责保持独立模块，见 [迁移记录](iterations/next-migration.md)。这是当前应用运行框架整理，不等于生产身份、RAG 或业务嵌入已完成；文首旧日期快照需结合后续迭代阅读。
+
 2026-10-23 约定更新：主要在本项目真实产品实现和测试中学习；agent-practice 保留相关资料供对照，不强制为每个知识点新增独立演示程序/数据库。下文中的实验计划均按此原则择需调整。当前 checkpoint 表统一使用产品数据库 public。
 
 每次只选择下面一个编号的小单元：说明问题、方案对照与契约 → 在用户已授权范围内实现（业务事实缺失时先澄清）→ 走读调用链 → 验证正常和失败场景 → 更新学习映射。阶段是能力分组，不是一轮代码生成的范围。不预先建立全部目录、接口或通用中间件框架。
@@ -125,6 +127,8 @@ D1 及最小观测在 A/B 期间引入；D2–D5 在接入真实个人数据/业
 学习仓库 CopilotKit 示例的 BuiltInAgent 使用 AI SDK，是独立教学路径；本项目保留 LangGraph Agent，通过适配器连接。当前官方 TS quickstart 的部分示例对 SDK/Zod 有特定版本约束，实施时验证兼容，不强制降级整个应用或绕过 peer 冲突。
 
 ## F. 会话服务、并发与恢复
+
+2026-10-25：已加入独立用户可见消息档案、稳定请求 ID 幂等、完成/等待回执核对与结果 unknown 处置，UI 刷新可恢复历史和当前表单；模型/工具不因读状态而再次执行。复用当前产品锁和 public schema，不迁移 Agent 运行时，见 [迭代](iterations/conversation-history-idempotency.md)。运行中重连续流、持久任务队列和多实例执行租约仍未实现。
 
 来源：apps/support-chat/{message-queues,join-rejoin,branching,time-travel}。这些示例依赖 Agent Server/SDK 行为，不能只复制客户端 hook 就认为服务端能力存在。
 

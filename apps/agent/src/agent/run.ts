@@ -22,6 +22,8 @@ import {
   type InformationSubmission,
 } from "../interactions/contracts.ts";
 import { informationPause } from "../interactions/pause.ts";
+import type { ConversationBackend } from "../conversations/service.ts";
+import { executeRecorded, requestHash } from "../conversations/execution.ts";
 
 export type SupportRunEvent =
   | { type: "text"; text: string; node: string }
@@ -38,23 +40,27 @@ export async function runSupportAgent(
     submission?: InformationSubmission;
     signal?: AbortSignal;
     restore?: boolean;
+    conversation?: ConversationBackend;
+    requestId?: string;
   },
 ): Promise<SupportRunResult> {
   if (!question.trim() && !interaction?.restore && !interaction?.submission)
     throw new Error("用户输入不能为空。");
   if (threadId !== undefined && !threadId.trim())
     throw new Error("会话标识不能为空。");
+  const payloadHash = requestHash(question, interaction?.submission);
   question = redactPii(question);
   const support =
     context === undefined ? undefined : validateSupportContext(context);
+  let recorded: { requestId: string; runId: string } | undefined;
   const execute = async (): Promise<SupportRunResult> => {
     const scope = interaction
       ? memoryScope(validateSupportContext(support))
       : "";
     const savedThread = threadId ? checkpointThreadId(threadId, support) : "";
-    let logicalRunId: string = randomUUID();
+    let logicalRunId: string = recorded?.runId ?? randomUUID();
     let graphInput: { messages: HumanMessage[] } | Command = {
-      messages: [new HumanMessage({ id: randomUUID(), content: question })],
+      messages: [new HumanMessage({ id: recorded?.requestId ?? randomUUID(), content: question })],
     };
     if (interaction) {
       if (!savedThread) throw new InformationError("需要明确的会话标识。");
@@ -156,7 +162,7 @@ export async function runSupportAgent(
               : AbortSignal.timeout(65_000),
             context: {
               ...(support ? { support } : {}),
-              ...(interaction ? { interaction: { runId: logicalRunId } } : {}),
+              ...(interaction ? { interaction: { runId: logicalRunId, ...(recorded ? { requestId: recorded.requestId } : {}) } } : {}),
             },
             ...(threadId === undefined
               ? {}
@@ -252,11 +258,21 @@ export async function runSupportAgent(
       }
     });
   };
+  const work = async () => {
+    if (!interaction?.conversation || interaction.restore) return execute();
+    if (!threadId || !/^[A-Za-z0-9_-]{1,128}$/.test(threadId)) throw new Error("会话记录：需要有效的会话标识。");
+    const requestId = interaction.submission?.submissionId ?? interaction.requestId;
+    if (!requestId) throw new Error("会话记录：需要稳定的请求 ID。");
+    return executeRecorded({ agent, forms: interaction.service, journal: interaction.conversation,
+      scope: memoryScope(validateSupportContext(support)), thread: checkpointThreadId(threadId ?? "", support),
+      requestId, payloadHash, question, submission: interaction.submission,
+      work: async (id, runId) => { recorded = { requestId: id, runId }; return execute(); } });
+  };
   return interaction
     ? interaction.service.withThread(
         memoryScope(validateSupportContext(support)),
         checkpointThreadId(threadId ?? "", support),
-        execute,
+        work,
       )
-    : execute();
+    : work();
 }

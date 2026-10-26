@@ -1,7 +1,7 @@
-"use client";
-
+// 由 SupportChat 的客户端入口引用；onResolved 只在客户端组件之间传递。
 import { useEffect, useState } from "react";
 import { useAgent, useCopilotKit } from "@copilotkit/react-core/v2";
+import type { Message } from "@ag-ui/core";
 import {
   informationFormSchema,
   validateAnswers,
@@ -47,7 +47,7 @@ export function InformationForm({ form, onResolved }: { form: Form; onResolved?:
       if (!current.interruptId) throw new Error("暂停点不可用，请刷新表单。");
       setSending(true);
       // 页面只传答案和引用；身份、原始规格及状态都由服务端重新读取。
-      if (!agent.messages.some((message) => message.id === submissionId))
+      if (!agent.messages.some((message: Message) => message.id === submissionId))
         agent.addMessage({
           id: submissionId,
           role: "user",

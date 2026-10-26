@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { MemoryRecord, MemoryRepository, MemoryResult, MemoryWrite } from "./service.ts";
 
+type MemoryRow = Omit<MemoryRecord, "createdAt" | "updatedAt"> & { createdAt: Date; updatedAt: Date };
+
 const schema = `
 CREATE TABLE IF NOT EXISTS public.support_memories (
   scope text NOT NULL, id uuid NOT NULL, version integer NOT NULL CHECK (version > 0),
@@ -30,7 +32,7 @@ export class PostgresMemoryRepository implements MemoryRepository {
   }
 
   async list(scope: string): Promise<MemoryRecord[]> {
-    const result = await this.pool.query(`SELECT id, version, content, deleted, source,
+    const result = await this.pool.query<MemoryRow>(`SELECT id, version, content, deleted, source,
       created_at AS "createdAt", updated_at AS "updatedAt" FROM public.support_memories
       WHERE scope=$1 AND NOT deleted ORDER BY updated_at DESC, id LIMIT 50`, [scope]);
     return result.rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }));

@@ -8,6 +8,13 @@ export interface RequestRecord {
   result: SupportRunResult | null; updatedAt: string;
 }
 
+type RequestRow = Omit<RequestRecord, "updatedAt"> & { updatedAt: Date };
+type HistoryMessageRow = ConversationSnapshot["messages"][number];
+type HistoryRequestRow = Omit<ConversationSnapshot["requests"][number], "updatedAt"> & {
+  updatedAt: Date;
+  history_complete: boolean;
+};
+
 // 与 checkpoint 分离：这里存用户可见的档案和接收请求，不存内部推理/系统消息/工具结果。
 export class ConversationService {
   constructor(private readonly pool: pg.Pool) {}
@@ -37,7 +44,7 @@ export class ConversationService {
   }
 
   async find(scope: string, thread: string, requestId: string): Promise<RequestRecord | undefined> {
-    const rows = await this.pool.query(`SELECT request_kind AS kind,request_id AS "requestId",run_id AS "runId",payload_hash AS "payloadHash",status,result,
+    const rows = await this.pool.query<RequestRow>(`SELECT request_kind AS kind,request_id AS "requestId",run_id AS "runId",payload_hash AS "payloadHash",status,result,
       updated_at AS "updatedAt" FROM public.support_conversation_requests WHERE scope=$1 AND thread_id=$2 AND request_id=$3`, [scope, thread, requestId]);
     return rows.rows[0] ? { ...rows.rows[0], updatedAt: rows.rows[0].updatedAt.toISOString() } : undefined;
   }
@@ -76,8 +83,8 @@ export class ConversationService {
   }
 
   async history(scope: string, thread: string): Promise<Pick<ConversationSnapshot, "messages" | "requests" | "historyComplete">> {
-    const messages = await this.pool.query(`SELECT id,role,content FROM public.support_conversation_messages WHERE scope=$1 AND thread_id=$2 ORDER BY sequence`, [scope, thread]);
-    const requests = await this.pool.query(`SELECT request_id AS "requestId",run_id AS "runId",status,updated_at AS "updatedAt"
+    const messages = await this.pool.query<HistoryMessageRow>(`SELECT id,role,content FROM public.support_conversation_messages WHERE scope=$1 AND thread_id=$2 ORDER BY sequence`, [scope, thread]);
+    const requests = await this.pool.query<HistoryRequestRow>(`SELECT request_id AS "requestId",run_id AS "runId",status,updated_at AS "updatedAt"
       ,history_complete FROM public.support_conversation_requests WHERE scope=$1 AND thread_id=$2 ORDER BY sequence`, [scope, thread]);
     return { messages: messages.rows, historyComplete: requests.rows.every((row) => row.history_complete),
       requests: requests.rows.map(({ history_complete, ...row }) => ({ ...row, updatedAt: row.updatedAt.toISOString() })) };

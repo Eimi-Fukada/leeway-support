@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { createSupportAgent } from "../agent/agent.ts";
+import type { SupportStateSnapshot } from "../agent/state.ts";
 import { runSupportAgent } from "../agent/run.ts";
 import { checkpointThreadId, type SupportContext } from "../support-context.ts";
 import type { InformationBackend } from "../interactions/service.ts";
@@ -51,7 +52,7 @@ export async function chat(
   let pending: InformationForm | undefined;
   if (resumeThreadId !== undefined) {
     // 查看状态不会请求模型；仅允许继续已完成的会话，不自动重跑失败步骤。
-    const state = await agent.graph.getState({ configurable: { thread_id: checkpointThreadId(resumeThreadId, context) } });
+    const state: SupportStateSnapshot = await agent.graph.getState({ configurable: { thread_id: checkpointThreadId(resumeThreadId, context) } });
     if (!state.values.messages?.length) throw new Error("会话恢复失败：未找到已保存的会话。");
     const pause = information ? informationPause(state) : undefined;
     if (!pause && (state.next.length > 0 || state.tasks?.some((task) => task.error || task.interrupts?.length))) {

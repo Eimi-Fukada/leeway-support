@@ -5,6 +5,7 @@ import {
   type ToolRuntime,
 } from "langchain";
 import { z } from "zod";
+import type { ToolCall } from "@langchain/core/messages/tool";
 import { interrupt, isGraphInterrupt } from "@langchain/langgraph";
 import {
   informationSpecSchema,
@@ -94,7 +95,7 @@ export function informationMiddleware() {
         last &&
         "tool_calls" in last &&
         Array.isArray(last.tool_calls) &&
-        last.tool_calls.some((call) => call.name === "request_information") &&
+        last.tool_calls.some((call: ToolCall) => call.name === "request_information") &&
         last.tool_calls.length > 1
       ) {
         throw new InformationError(

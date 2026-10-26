@@ -39,7 +39,7 @@ export function sanitizeArtifact(value: unknown, secrets: string[]): unknown {
       .replace(/\bBearer\s+[^\s"'<>]+/gi, "Bearer [REDACTED]")
       .replace(/((?:api[_ -]?key|password|密码|access[_ -]?token)\s*[:=：]\s*)[^\s"'<>]+/gi, "$1[REDACTED]");
   }
-  if (Array.isArray(value)) return value.map((entry) => sanitizeArtifact(entry, secrets));
+  if (Array.isArray(value)) return value.map((entry: unknown) => sanitizeArtifact(entry, secrets));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, sanitizeArtifact(entry, secrets)]));
   return value;
 }

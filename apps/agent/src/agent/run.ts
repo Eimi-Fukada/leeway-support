@@ -2,6 +2,7 @@ import { AIMessage, HumanMessage } from "langchain";
 import { Command } from "@langchain/langgraph";
 import { randomUUID } from "node:crypto";
 import type { createSupportAgent } from "./agent.ts";
+import type { SupportStateSnapshot } from "./state.ts";
 import { redactPii } from "./middleware/pii.ts";
 import {
   markModelOutput,
@@ -75,7 +76,7 @@ export async function runSupportAgent(
         );
         if (replay) return replay;
       }
-      const previous = await agent.graph.getState({
+      const previous: SupportStateSnapshot = await agent.graph.getState({
         configurable: { thread_id: savedThread },
       });
       const pause = informationPause(previous);
@@ -198,7 +199,7 @@ export async function runSupportAgent(
         if (interaction?.signal?.aborted)
           throw new InformationError("本次执行已取消，请重新核对会话状态。");
         if (interaction) {
-          const state = await agent.graph.getState({
+          const state: SupportStateSnapshot = await agent.graph.getState({
             configurable: { thread_id: savedThread },
           });
           const pause = informationPause(state);
@@ -238,7 +239,7 @@ export async function runSupportAgent(
         // 等待/失联不等同失败：checkpoint 里已有合法暂停点时保留表单，供显式恢复。
         if (interaction) {
           try {
-            const state = await agent.graph.getState({
+            const state: SupportStateSnapshot = await agent.graph.getState({
               configurable: { thread_id: savedThread },
             });
             if (!informationPause(state))

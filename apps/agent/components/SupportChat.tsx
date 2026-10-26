@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CopilotChat, CopilotKitProvider, useAgent, useCopilotKit, useRenderTool } from "@copilotkit/react-core/v2";
+import type { Message } from "@ag-ui/core";
+import type { AgentSubscriber, AgentSubscriberParams } from "@ag-ui/client";
 import { informationSpecSchema, type InformationForm as Form } from "../src/interactions/contracts.ts";
 import { canSendConversationMessage, conversationSnapshotSchema, pendingMessageSchema, type ConversationSnapshot } from "../src/conversations/contracts.ts";
 import { InformationForm } from "./InformationForm.tsx";
@@ -28,8 +30,8 @@ function Conversation({ user }: { user: string }) {
     const cached = sessionStorage.getItem(outboxKey);
     try { if (cached) setUnsent(pendingMessageSchema.parse(JSON.parse(cached))); } catch { sessionStorage.removeItem(outboxKey); }
     setReady(true);
-    const subscription = agent.subscribe({
-      onRunInitialized: ({ input }) => {
+    const subscriber: AgentSubscriber = {
+      onRunInitialized: ({ input }: AgentSubscriberParams) => {
         if (input.forwardedProps?.informationSubmission) return;
         const latest = input.messages.at(-1);
         const parsed = pendingMessageSchema.safeParse(latest && { id: latest.id, content: latest.content });
@@ -40,7 +42,8 @@ function Conversation({ user }: { user: string }) {
       },
       onRunStartedEvent: () => { setError(""); },
       onRunFinalized: () => { setRefresh((value) => value + 1); },
-    });
+    };
+    const subscription = agent.subscribe(subscriber);
     return () => subscription.unsubscribe();
   }, [agent, storageKey]);
   useEffect(() => {
@@ -89,7 +92,7 @@ function Conversation({ user }: { user: string }) {
       服务端尚未确认接收上一条消息。可核对状态，或用原请求标识重新发送。
       <button disabled={agent.isRunning} onClick={() => {
         setChecked(false);
-        if (!agent.messages.some((message) => message.id === unsent.id)) agent.addMessage({ id: unsent.id, role: "user", content: unsent.content });
+        if (!agent.messages.some((message: Message) => message.id === unsent.id)) agent.addMessage({ id: unsent.id, role: "user", content: unsent.content });
         void copilotkit.runAgent({ agent }).catch(() => setError("发送仍未确认，请核对状态。")).finally(() => setRefresh((value) => value + 1));
       }}>重发原消息</button>
     </div>}
@@ -107,7 +110,7 @@ function Conversation({ user }: { user: string }) {
 }
 export function SupportChat() {
   const [user, setUser] = useState("");
-  useEffect(() => { void fetch("/api/session").then((response) => response.json()).then((data) => setUser(data.user ?? "")); }, []);
+  useEffect(() => { void fetch("/api/session").then((response): Promise<{ user?: string }> => response.json()).then((data) => setUser(data.user ?? "")); }, []);
   return <main className="support-shell">
     <aside><div className="brand">L<span>Leeway Support</span></div><div className="eyebrow">客服调试工作台</div>
       <h1>把问题说清楚，<br />一起找到下一步。</h1><p>直接描述你遇到的问题。需要补充资料时，助手会暂停并提供表单。</p>

@@ -23,8 +23,3 @@ CREATE TABLE IF NOT EXISTS public.knowledge_bases (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS knowledge_bases_owner_name ON public.knowledge_bases(owner_id,lower(name));
-CREATE TABLE IF NOT EXISTS public.knowledge_login_attempts (
-  bucket text PRIMARY KEY,
-  window_start timestamptz NOT NULL,
-  attempts integer NOT NULL CHECK (attempts>0)
-);

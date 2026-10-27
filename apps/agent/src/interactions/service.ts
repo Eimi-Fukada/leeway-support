@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import pg from "pg";
 import { informationSpecSchema, submissionSchema, InformationError, validateAnswers, type InformationForm, type InformationSpec, type InformationSubmission, type InformationReply } from "./contracts.ts";
 import { redactPii } from "../agent/middleware/pii.ts";
+import { readSupportSchema } from "../config/schema.ts";
 
 export interface SupportRunResult { answer: string; elapsedMs: number; runId: string; status: "completed" | "waiting_for_input"; information?: InformationForm; reconciled?: boolean }
 // 执行层依赖这些能力；测试可注入无数据库实现，真实入口始终使用 PostgreSQL。
@@ -19,17 +20,7 @@ export class InformationService {
   constructor(private readonly pool: pg.Pool) {}
 
   async setup() {
-    await this.pool.query(`CREATE TABLE IF NOT EXISTS public.support_information_forms (
-      id uuid PRIMARY KEY, scope text NOT NULL, thread_id text NOT NULL, run_id uuid NOT NULL,
-      tool_call_id text NOT NULL, spec jsonb NOT NULL,
-      status text NOT NULL CHECK(status IN ('draft','pending','submitted','invalidated')),
-      expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
-      submission_id uuid, submission_hash text, result jsonb,
-      UNIQUE(scope, thread_id, run_id)
-    )`);
-    await this.pool.query("ALTER TABLE public.support_information_forms ADD COLUMN IF NOT EXISTS interrupt_id text");
-    await this.pool.query(`CREATE INDEX IF NOT EXISTS support_information_forms_thread
-      ON public.support_information_forms(scope, thread_id)`);
+    await this.pool.query(await readSupportSchema("002_information_forms.sql"));
   }
 
   async withThread<T>(scope: string, threadId: string, work: () => Promise<T>): Promise<T> {

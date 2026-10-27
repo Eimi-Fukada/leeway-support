@@ -19,6 +19,8 @@ pnpm install
 
 ## 运行
 
+数据库可独立初始化，无需先运行模型：`corepack pnpm agent:db:init` 初始化 Agent 的会话、请求、表单、记忆与 checkpoint；`corepack pnpm knowledge:db:init` 初始化知识库。`corepack pnpm db:init` 依次执行两者；`corepack pnpm db:status` 只读检查两者的实际结构，单独检查用 `agent:db:status` / `knowledge:db:status`。不再维护自有 SQL 执行历史。完整 [数据表职责及清理清单](docs/database-tables.md)、[Agent SQL](apps/agent/sql/README.md)、[知识库 SQL](apps/knowledge/sql/README.md) 已分别列出；当前均使用产品库 public，不创建额外数据库。
+
 知识库项目已独立放在 [apps/knowledge](apps/knowledge/README.md)，提供登录、知识库创建/列表与退出。首次执行 `corepack pnpm knowledge:db:init` 初始化表及 support 账号，再运行 `corepack pnpm knowledge:dev`，打开 http://127.0.0.1:3200。SQL 位于 apps/knowledge/sql；生产构建后使用 `corepack pnpm knowledge:start`。下面 dev/start/ui 命令仍属于 Agent 应用。
 
 ```sh

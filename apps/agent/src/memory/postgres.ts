@@ -1,20 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { MemoryRecord, MemoryRepository, MemoryResult, MemoryWrite } from "./service.ts";
+import { readSupportSchema } from "../config/schema.ts";
 
 type MemoryRow = Omit<MemoryRecord, "createdAt" | "updatedAt"> & { createdAt: Date; updatedAt: Date };
-
-const schema = `
-CREATE TABLE IF NOT EXISTS public.support_memories (
-  scope text NOT NULL, id uuid NOT NULL, version integer NOT NULL CHECK (version > 0),
-  content text NOT NULL, deleted boolean NOT NULL DEFAULT false, source jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (scope, id)
-);
-CREATE TABLE IF NOT EXISTS public.support_memory_operations (
-  scope text NOT NULL, operation_id text NOT NULL, payload_hash text NOT NULL, result jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (scope, operation_id)
-);`;
 
 export class PostgresMemoryRepository implements MemoryRepository {
   constructor(private readonly pool: pg.Pool) {}
@@ -23,7 +12,7 @@ export class PostgresMemoryRepository implements MemoryRepository {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(461992303)");
-      await client.query(schema);
+      await client.query(await readSupportSchema("001_long_term_memory.sql"));
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});

@@ -14,13 +14,6 @@ export class KnowledgeService {
   async login(input: unknown): Promise<{ user: User; token: string }> {
     const parsed = loginSchema.safeParse(input);
     if (!parsed.success) throw new AppError(400, "请填写有效的账号和密码。");
-    // 单管理员入口共享持久限额；多进程不能绕过，成功登录后清除失败窗口。
-    const throttle = await this.pool.query<{ attempts: number }>(`INSERT INTO public.knowledge_login_attempts(bucket,window_start,attempts)
-      VALUES('administrator',now(),1) ON CONFLICT(bucket) DO UPDATE SET
-      attempts=CASE WHEN knowledge_login_attempts.window_start<now()-interval '15 minutes' THEN 1 ELSE knowledge_login_attempts.attempts+1 END,
-      window_start=CASE WHEN knowledge_login_attempts.window_start<now()-interval '15 minutes' THEN now() ELSE knowledge_login_attempts.window_start END
-      RETURNING attempts`);
-    if (throttle.rows[0]!.attempts > 10) throw new AppError(429, "登录尝试过于频繁，请 15 分钟后再试。");
     const found = await this.pool.query<UserRow>("SELECT id,username,password_hash FROM public.knowledge_users WHERE username=$1 AND active=true", [parsed.data.username]);
     const row = found.rows[0];
     // 账号不存在也进行同成本校验，返回相同提示。
@@ -34,7 +27,6 @@ export class KnowledgeService {
       await client.query("DELETE FROM public.knowledge_sessions WHERE expires_at<=now()");
       await client.query(`INSERT INTO public.knowledge_sessions(token_hash,user_id,expires_at)
         VALUES($1,$2,now()+interval '7 days')`, [digest(token), row.id]);
-      await client.query("DELETE FROM public.knowledge_login_attempts WHERE bucket='administrator'");
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
     finally { client.release(); }

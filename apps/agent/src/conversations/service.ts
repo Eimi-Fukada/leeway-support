@@ -1,6 +1,7 @@
 import type pg from "pg";
 import type { SupportRunResult } from "../interactions/service.ts";
 import { ConversationError, requestIdSchema, type ConversationSnapshot } from "./contracts.ts";
+import { readSupportSchema } from "../config/schema.ts";
 
 export interface RequestRecord {
   kind: "message" | "resume" | "legacy";
@@ -23,21 +24,7 @@ export class ConversationService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(461992304)");
-      await client.query(`CREATE TABLE IF NOT EXISTS public.support_conversation_requests (
-      scope text NOT NULL, thread_id text NOT NULL, request_id text NOT NULL, run_id uuid NOT NULL,
-      payload_hash text NOT NULL, status text NOT NULL CHECK(status IN ('running','waiting_for_input','completed','failed','unknown')),
-      history_complete boolean NOT NULL DEFAULT true,
-      request_kind text NOT NULL DEFAULT 'legacy',
-      result jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
-      sequence bigserial, PRIMARY KEY(scope,thread_id,request_id)
-    );
-    CREATE TABLE IF NOT EXISTS public.support_conversation_messages (
-      scope text NOT NULL, thread_id text NOT NULL, id text NOT NULL, role text NOT NULL CHECK(role IN ('user','assistant')),
-      content text NOT NULL, request_id text NOT NULL, sequence bigserial,
-      created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(scope,thread_id,id)
-    );
-    ALTER TABLE public.support_conversation_requests ADD COLUMN IF NOT EXISTS history_complete boolean NOT NULL DEFAULT true;
-    ALTER TABLE public.support_conversation_requests ADD COLUMN IF NOT EXISTS request_kind text NOT NULL DEFAULT 'legacy';`);
+      await client.query(await readSupportSchema("003_conversations.sql"));
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
     finally { client.release(); }

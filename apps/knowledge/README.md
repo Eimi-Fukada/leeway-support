@@ -32,11 +32,11 @@ corepack pnpm knowledge:start
 
 ## SQL 文件
 
-- sql/001_schema.sql：public 中的 knowledge_users、knowledge_sessions、knowledge_bases、knowledge_login_attempts 及约束/索引。
+- sql/001_schema.sql：public 中的 knowledge_users、knowledge_sessions、knowledge_bases 及约束/索引。
 - sql/002_seed_support.sql：初始化 support，仅包含密码哈希。username 冲突时不覆盖已有账号或重置密码。
 - sql/003_documents.sql：knowledge_documents 文档元数据、库内内容指纹唯一性与索引。本轮已应用，现有环境无需手动改表。
 
-可以按顺序直接执行 SQL，也可以使用 db:init。脚本在一笔事务和 advisory lock 中执行迁移，knowledge_schema_migrations 保存文件校验和；重复运行跳过已应用文件，改动已应用迁移会拒绝，后续新增迁移文件。数据库需预先存在，脚本不修改 Agent 表。
+可以按 001–003 顺序直接执行 SQL，也可以使用 db:init。脚本按文件名顺序执行 sql 目录全部编号 SQL，使用一笔事务和 advisory lock，不保存执行记录；现有 SQL 可重复执行，已有账号不重置。`corepack pnpm knowledge:db:status` 只读检查表、字段、必要约束/索引和 support 账号，缺失时提示对应文件。数据库需预先存在，脚本不修改 Agent 表。完整表清单与检查范围见 [SQL 目录说明](sql/README.md)。
 
 ## 原文件与预览
 
@@ -66,7 +66,7 @@ corepack pnpm knowledge:start
 → 退出删除数据库会话并清理 Cookie，旧 Cookie 无法重放
 ```
 
-会话有效期七天；过期或停用用户不能继续访问。登录入口按部署共享数据库计数，15 分钟窗口最多 10 次，成功登录后清除计数；这是单管理员入口的基本保护，未实现按外部代理 IP 的多用户风控。POST 要求精确同源 Origin，实际 JSON 请求体最多 8 KiB。
+会话有效期七天；过期或停用用户不能继续访问。同账号可多设备登录，退出仅撤销当前会话。应用不再累计登录频次，接口频率限制由部署网关负责，当前仓库不实现网关。POST 要求精确同源 Origin，实际 JSON 请求体最多 8 KiB。
 
 知识库名称最多 60 字符、描述最多 300 字符；同一账号下名称忽略大小写唯一，数据库原子约束处理并发冲突。知识库不强制归属业务项目，未来通过客服应用授权引用；本轮仅有管理员管理归属。
 
@@ -78,7 +78,8 @@ components/           登录、知识库列表和创建弹窗
 src/                  密码、数据库连接、业务服务、纯数据契约与请求校验
 src/server/           server-only 资源与请求会话读取
 sql/                  可直接执行的 schema 与账号初始化
-scripts/init-db.ts    事务迁移与校验和
+scripts/init-db.ts    按编号执行初始化 SQL
+scripts/db-status.ts  只读检查结构与初始账号
 public/brand-icon.svg 可编辑原创图标；PNG 为 512px 导出
 tests/                密码/输入/请求边界及真实 PostgreSQL 测试
 ```
@@ -89,4 +90,4 @@ corepack pnpm knowledge:test:postgres
 corepack pnpm --filter @leeway-support/knowledge typecheck
 ```
 
-PostgreSQL 测试使用随机 it- 用户与其知识库，结束后只清理这些记录；测试包含单管理员入口限额，运行时不要同时进行真实登录操作。运行截图保存在根目录 output/playwright/knowledge，默认不提交。
+PostgreSQL 测试使用随机 it- 用户与其知识库，结束后只清理这些记录；另用临时表验证 SQL 完整性和只读状态检查。运行截图保存在根目录 output/playwright/knowledge，默认不提交。

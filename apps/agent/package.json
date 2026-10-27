@@ -7,9 +7,12 @@
     "start": "tsx src/index.ts",
     "ui": "node scripts/ui.mjs",
     "ui:start": "node scripts/ui.mjs --production",
+    "db:init": "tsx scripts/init-db.ts",
+    "db:status": "tsx scripts/db-status.ts",
+    "db:export-checkpoint": "tsx scripts/export-checkpoint-sql.ts",
     "build": "next build",
     "test": "tsx --import ./tests/setup.ts --test tests/*.test.ts",
-    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts tests/conversation.postgres.ts",
+    "test:postgres": "tsx --import ./tests/setup.ts --test tests/postgres.integration.ts tests/information.postgres.ts tests/conversation.postgres.ts tests/schema.postgres.ts",
     "eval:behavior": "tsx evals/index.ts",
     "typecheck": "next typegen && tsc --noEmit"
   },

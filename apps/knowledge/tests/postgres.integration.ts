@@ -16,7 +16,6 @@ async function fixture() {
     try {
       await pool.query("DELETE FROM public.knowledge_bases WHERE owner_id=$1", [id]);
       await pool.query("DELETE FROM public.knowledge_users WHERE id=$1", [id]);
-      await pool.query("DELETE FROM public.knowledge_login_attempts WHERE bucket='administrator'");
     } finally { await pool.end(); }
   } };
 }
@@ -52,11 +51,17 @@ test("PostgreSQL：库持久化、名称冲突、并发创建唯一与归属隔�
     await assert.rejects(env.service.create(env.id, { name: " " }));
   } finally { await env.close(); }
 });
-test("PostgreSQL：登录限额由数据库累计，不因换服务实例而绕过", async () => {
+test("PostgreSQL：多设备会话独立，退出一个设备不影响另一个设备", async () => {
   const env = await fixture();
   try {
-    await env.pool.query(`INSERT INTO public.knowledge_login_attempts(bucket,window_start,attempts) VALUES('administrator',now(),10)
-      ON CONFLICT(bucket) DO UPDATE SET window_start=now(),attempts=10`);
-    await assert.rejects(new KnowledgeService(env.pool).login({ username: env.username, password: env.password }), /登录尝试过于频繁/);
+    const first = await env.service.login({ username: env.username, password: env.password });
+    const another = new KnowledgeService(env.pool);
+    const second = await another.login({ username: env.username, password: env.password });
+    assert.notEqual(first.token, second.token);
+    assert.equal((await env.service.user(first.token))?.id, env.id);
+    assert.equal((await env.service.user(second.token))?.id, env.id);
+    await env.service.logout(first.token);
+    assert.equal(await another.user(first.token), null);
+    assert.equal((await another.user(second.token))?.id, env.id);
   } finally { await env.close(); }
 });

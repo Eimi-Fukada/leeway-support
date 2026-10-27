@@ -8,8 +8,9 @@
     "build": "next build",
     "typecheck": "next typegen && tsc --noEmit",
     "db:init": "tsx scripts/init-db.ts",
+    "db:status": "tsx scripts/db-status.ts",
     "test": "tsx --test tests/*.test.ts",
-    "test:postgres": "tsx --test tests/postgres.integration.ts tests/documents.postgres.ts"
+    "test:postgres": "tsx --test tests/postgres.integration.ts tests/documents.postgres.ts tests/schema.postgres.ts"
   },
   "dependencies": {
     "mammoth": "1.11.0",

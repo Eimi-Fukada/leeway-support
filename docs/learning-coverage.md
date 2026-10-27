@@ -100,6 +100,12 @@
 
 ## 下一小步
 
+2026-10-26 上传补充：库内详情已接真实原文上传、持久文件列表、PDF/文本/Word 预览与下载，见 [原文件上传迭代](iterations/knowledge-document-upload.md)。使用数据库元数据 + 私有本地持久目录，存储接口独立；未接 OSS，云/多实例需另验。上传不等于已解析/可检索，RAG/Agent 调用仍未实现。工作区 132 项确定性检查、知识库 4 项真实 PostgreSQL/磁盘检查、构建与类型通过。
+
+2026-10-26：按用户要求交付 [知识库详情 UI](iterations/knowledge-detail-ui.md)，移除外层聊天，卡片进入库内三栏；本地文件预览、草稿和移动端切换仅为 UI，没有上传、Agent 请求或数据库变更。后续上传与问答沿此详情接入，不再建设外层独立聊天页。
+
+2026-10-26：按用户授权新增 apps/knowledge Next 应用：单账号数据库登录/退出、知识库创建与列表、schema/密码哈希 seed SQL、原创 SVG/PNG 图标，见 [登录创建迭代](iterations/knowledge-login-create.md)。使用当前 agent-support 的 public.knowledge_* 表，与 Agent 源码/依赖隔离；固定 support 账号已初始化。上传、解析、RAG 和跨应用知识授权仍未实现，不把管理员库归属当成业务授权。
+
 2026-10-26 类型补充：已统一 Graph 快照读取、AG-UI 订阅事件、数据库行及原始数组的类型边界；78 个非依赖/非 .next 文件的回调 any 扫描与 Next 插件诊断通过，122 项确定性测试、21 项 PostgreSQL 测试及生产构建通过。保存/恢复时序见 [用户提问源码走读](conversation-lifecycle-walkthrough.md)，本轮没有改变历史与状态业务行为，也未调用真实模型。
 
 2026-10-26：已将 [知识库功能计划](knowledge-platform-plan.md)重写为当前有效的 K1–K13 小切片：独立应用、单账号登录、独立知识库、上传、解析、分块、索引与发布、检索、失效、应用授权接入、原 Agent RAG、聊天闭环及评估。移除旧文中的强制项目层，并明确新编号替代旧 K1–K7；这里只拆分功能，没有搭建知识库应用。

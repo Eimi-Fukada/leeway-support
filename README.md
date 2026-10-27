@@ -19,6 +19,8 @@ pnpm install
 
 ## 运行
 
+知识库项目已独立放在 [apps/knowledge](apps/knowledge/README.md)，提供登录、知识库创建/列表与退出。首次执行 `corepack pnpm knowledge:db:init` 初始化表及 support 账号，再运行 `corepack pnpm knowledge:dev`，打开 http://127.0.0.1:3200。SQL 位于 apps/knowledge/sql；生产构建后使用 `corepack pnpm knowledge:start`。下面 dev/start/ui 命令仍属于 Agent 应用。
+
 ```sh
 # Next Web 开发服务，页面与 API 一起启动；打开 http://127.0.0.1:3100
 pnpm ui -- --user alice

@@ -1,0 +1,97 @@
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import type { KnowledgeBase } from "../src/contracts.ts";
+import { Icon } from "./Icons.tsx";
+import { ACCEPT_DOCUMENTS, MAX_FILE_BYTES, type StoredDocument } from "../src/documents/contracts.ts";
+import { DocumentPreview } from "./DocumentPreview.tsx";
+
+interface UploadItem { id: string; name: string; status: "uploading" | "failed"; error?: string }
+function fileSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// 原文件列表来自服务端；问答草稿仍仅在本库界面内，尚不调用 Agent。
+export function KnowledgeDetail({ base, bases }: { base: KnowledgeBase; bases: KnowledgeBase[] }) {
+  const router = useRouter();
+  const picker = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<StoredDocument[]>([]);
+  const [queue, setQueue] = useState<UploadItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const [preview, setPreview] = useState<StoredDocument>();
+  const uploads = useRef<AbortController | null>(null);
+  const [search, setSearch] = useState("");
+  const [draft, setDraft] = useState("");
+  const [view, setView] = useState<"documents" | "question">("documents");
+  const visibleFiles = files.filter((file: StoredDocument) => file.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const busy = queue.some((item: UploadItem) => item.status === "uploading");
+  const endpoint = `/api/knowledge-bases/${base.id}/documents`;
+  useEffect(() => {
+    const abort = new AbortController(); setLoading(true); setLoadError("");
+    void fetch(endpoint, { signal: abort.signal }).then(async (response) => {
+      if (response.status === 401) { router.replace("/login"); router.refresh(); return; }
+      const body: { documents?: StoredDocument[]; error?: string } = await response.json();
+      if (!response.ok || !body.documents) throw new Error(body.error ?? "无法读取文件列表。");
+      setFiles(body.documents);
+    }).catch((cause: unknown) => { if (!abort.signal.aborted) setLoadError(cause instanceof Error ? cause.message : "无法读取文件列表。"); })
+      .finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    return () => abort.abort();
+  }, [endpoint, refresh, router]);
+  useEffect(() => () => uploads.current?.abort(), []);
+  async function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
+    const chosen = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    if (!chosen.length || busy) return;
+    if (chosen.length > 10) { setNotice("每次最多选择 10 个文件，请分批上传。"); return; }
+    const controller = new AbortController(); uploads.current = controller; setNotice("");
+    const batch = chosen.map((file: File) => ({ id: crypto.randomUUID(), file }));
+    setQueue((previous: UploadItem[]) => [...previous.filter((item: UploadItem) => item.status !== "failed"), ...batch.map((item): UploadItem => ({ id: item.id, name: item.file.name, status: "uploading" }))]);
+    for (const item of batch) {
+      if (controller.signal.aborted) break;
+      try {
+        if (item.file.size > MAX_FILE_BYTES) throw new Error("每个文件最多 10 MB。");
+        const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(item.file.name) }, body: item.file, signal: controller.signal });
+        const body: { document?: StoredDocument; duplicate?: boolean; error?: string } = await response.json();
+        if (response.status === 401) { router.replace("/login"); router.refresh(); break; }
+        if (!response.ok || !body.document) throw new Error(body.error ?? "上传未确认，请刷新列表核对。");
+        const stored = body.document;
+        setFiles((previous: StoredDocument[]) => previous.some((file: StoredDocument) => file.id === stored.id) ? previous : [stored, ...previous]);
+        setQueue((previous: UploadItem[]) => previous.filter((entry: UploadItem) => entry.id !== item.id));
+        setNotice(body.duplicate ? `「${item.file.name}」的内容已存在，已保留原文件。` : `已上传「${stored.name}」，原文件可预览。`);
+      } catch (cause) {
+        if (controller.signal.aborted) break;
+        setQueue((previous: UploadItem[]) => previous.map((entry: UploadItem) => entry.id === item.id ? { ...entry, status: "failed", error: cause instanceof Error ? cause.message : "上传未确认，请刷新列表核对。" } : entry));
+      }
+    }
+  }
+  return <div className="knowledge-detail" data-view={view}>
+    <div className="detail-mobile-toolbar"><Link href="/" className="icon-button" aria-label="返回全部知识库"><Icon name="back" size={19}/></Link>
+      <select aria-label="切换知识库" value={base.id} onChange={(event: ChangeEvent<HTMLSelectElement>) => router.push(`/knowledge-bases/${event.currentTarget.value}`)}>{bases.map((item: KnowledgeBase) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+    <div className="detail-view-tabs" aria-label="详情区域"><button type="button" aria-pressed={view === "documents"} onClick={() => setView("documents")}><Icon name="file" size={17}/>文档</button><button type="button" aria-pressed={view === "question"} onClick={() => setView("question")}><Icon name="chat" size={17}/>库内问答</button></div>
+    <section className="document-panel" aria-labelledby="current-library-title">
+      <header className="document-heading"><img src="/brand-icon.svg" width={60} height={60} alt=""/><div><span className="document-kicker">我的知识库</span><h1 id="current-library-title">{base.name}</h1></div></header>
+      <p className="document-description">{base.description || "在这里收集资料，围绕同一份知识展开对话。"}</p>
+      <div className="document-toolbar"><h2>文件列表 <span>{files.length}</span></h2><button type="button" className="icon-button" aria-label="上传文档" disabled={busy || loading || !!loadError} onClick={() => picker.current?.click()}><Icon name="upload" size={18}/></button></div>
+      <input type="file" ref={picker} className="visually-hidden" tabIndex={-1} aria-label="上传本地文件" accept={ACCEPT_DOCUMENTS} multiple onChange={(event: ChangeEvent<HTMLInputElement>) => void chooseFiles(event)}/>
+      {files.length > 0 && <div className="file-preview-tools"><label className="file-search"><Icon name="search" size={16}/><input value={search} onChange={(event: ChangeEvent<HTMLInputElement>) => setSearch(event.currentTarget.value)} placeholder="搜索文件" aria-label="搜索文件"/></label><p className="preview-note"><span/>原文已保存，尚未解析与索引。</p></div>}
+      {notice && <p className="upload-notice" role="status">{notice}</p>}
+      {!!queue.length && <ul className="upload-queue" aria-live="polite">{queue.map((item: UploadItem) => <li key={item.id} className={item.status}><strong>{item.name}</strong><span>{item.status === "uploading" ? "正在上传…" : item.error}</span>{item.status === "failed" && <button className="icon-button" type="button" aria-label={`关闭上传提示：${item.name}`} onClick={() => setQueue((previous: UploadItem[]) => previous.filter((entry: UploadItem) => entry.id !== item.id))}><Icon name="close" size={14}/></button>}</li>)}</ul>}
+      <div className="document-list">
+        {loading ? <p className="file-no-results" role="status">正在读取文件列表…</p> : loadError ? <div className="document-load-error"><p className="error" role="alert">{loadError}</p><button className="secondary-button" onClick={() => setRefresh((value: number) => value + 1)}>重新读取</button></div> : files.length === 0 ? <div className="document-empty"><div className="document-empty-icon"><Icon name="file" size={32}/><span>+</span></div><h3>还没有添加资料</h3><p>让产品说明、常见问题和使用指南<br/>在这里井井有条。</p><button type="button" className="secondary-button" disabled={busy} onClick={() => picker.current?.click()}><Icon name="plus" size={16}/>上传文件</button><span className="document-formats">PDF · DOCX · TXT · Markdown</span><p className="empty-preview-note">每文件最多 10 MB · 保存后可预览原文</p></div>
+        : visibleFiles.length === 0 ? <p className="file-no-results">没有找到匹配的文件。</p>
+        : <ul className="file-rows">{visibleFiles.map((file: StoredDocument) => <li key={file.id}><button type="button" className="file-preview-button" aria-label={`预览：${file.name}`} onClick={() => setPreview(file)}><span className="file-symbol"><Icon name="file" size={22}/></span><span className="file-info"><strong title={file.name}>{file.name}</strong><span>{fileSize(file.size)}<i/>已上传 · 未解析</span></span><Icon name="eye" size={17}/></button></li>)}</ul>}
+      </div><footer className="document-footer"><Icon name="lock" size={13}/><span>资料与问答围绕当前知识库展开</span></footer>
+    </section>
+    <section className="qa-panel" aria-labelledby="qa-title">
+      <header className="qa-toolbar"><div><span className="qa-scope-dot"/>当前知识库<span className="qa-library-name">{base.name}</span></div><div className="qa-toolbar-actions"><button className="icon-button" type="button" disabled aria-label="新建库内会话" title="问答开放后可新建会话"><Icon name="plus" size={19}/></button><button className="icon-button" type="button" disabled aria-label="库内会话历史" title="问答开放后可查看历史"><Icon name="history" size={19}/></button></div></header>
+      <div className="qa-welcome"><div className="qa-illustration"><span className="qa-paper paper-one"/><span className="qa-paper paper-two"/><span className="qa-bubble"><Icon name="chat" size={30}/></span><span className="qa-leaf"/></div><span className="eyebrow">A CONVERSATION WITH YOUR KNOWLEDGE</span><h2 id="qa-title">让资料，给你一些启发。</h2><p>围绕「{base.name}」提问，<br/>从知识中找到答案，也找到来源。</p>
+        <div className="question-suggestions">{["这个知识库主要讲了什么？", "帮我梳理关键内容"].map((question: string) => <button type="button" key={question} onClick={() => setDraft(question)}>{question}<Icon name="arrow" size={14}/></button>)}</div>
+      </div>
+      <div className="qa-composer-area"><div className="qa-composer"><textarea aria-label="基于当前知识库提问" value={draft} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.currentTarget.value)} maxLength={4000} placeholder={`基于「${base.name}」提问…`} rows={3} aria-describedby="qa-availability"/><div className="qa-composer-bottom"><span className="qa-library-chip"><Icon name="book" size={14}/><span>{base.name}</span></span><button type="button" className="send-button" disabled aria-label="发送提问" title="知识库问答即将开放"><Icon name="send" size={18}/></button></div></div><p id="qa-availability" className="qa-disclaimer">知识库问答即将开放 · 当前仅可编辑提问草稿</p></div>
+    </section>
+    {preview && <DocumentPreview key={preview.id} document={preview} libraryId={base.id} onClose={() => setPreview(undefined)}/>}
+  </div>;
+}

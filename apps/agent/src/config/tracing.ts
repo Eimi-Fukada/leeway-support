@@ -45,7 +45,7 @@ export function createTracing(
     throw new Error("追踪配置错误：LANGSMITH_ENDPOINT 必须是 HTTPS 地址（本地测试允许 HTTP）。");
   }
 
-  const secrets = [apiKey, env.OPENAI_API_KEY, env.DATABASE_URL].filter(
+  const secrets = [apiKey, env.OPENAI_API_KEY, env.DATABASE_URL, env.AGENT_KNOWLEDGE_WEB_SECRET, env.KNOWLEDGE_SUPPORT_AGENT_SECRET].filter(
     (value): value is string => Boolean(value),
   );
   // SDK 对输入、输出、metadata 和错误调用此函数；不改模型请求和 checkpoint。
@@ -61,7 +61,7 @@ export function createTracing(
     if (Array.isArray(value)) return value.map(redact);
     if (value && typeof value === "object") {
       return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-        key, /^(?:api[_-]?key|password|authorization|cookie|access[_-]?token|refresh[_-]?token|database_url)$/i.test(key)
+        key, /^(?:api[_-]?key|password|authorization|cookie|access[_-]?token|refresh[_-]?token|database_url|sessionHash|x-service-signature)$/i.test(key)
           ? "[REDACTED]" : redact(item),
       ]));
     }

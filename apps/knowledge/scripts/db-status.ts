@@ -4,6 +4,9 @@ import { createPool } from "../src/database.ts";
 import { inspectDatabase, printDatabaseStatus, type TableCheck } from "../../../scripts/database-status.ts";
 
 export const knowledgeTables: TableCheck[] = [
+  {name:"knowledge_application_grants",file:"009_integration.sql",columns:{application_id:"text!",knowledge_base_id:"uuid!",active:"bool!",revision:"int4!"},constraints:["knowledge_application_grants_pkey"]},
+  {name:"knowledge_service_nonces",file:"009_integration.sql",columns:{caller:"text!",nonce:"uuid!",expires_at:"timestamptz!"},constraints:["knowledge_service_nonces_pkey"]},
+  { name: "knowledge_retrievals", file: "008_retrieval.sql", columns: { id:"uuid!",user_id:"uuid!",knowledge_base_id:"uuid!",query:"text!",scope_revision:"text!",status:"text!",candidates:"jsonb!",evidence:"jsonb!",elapsed_ms:"int4!" }, constraints:["knowledge_retrievals_pkey"] },
   { name: "knowledge_users", file: "001_schema.sql",
     columns: { id: "uuid!", username: "text!", password_hash: "text!", active: "bool!", created_at: "timestamptz!" },
     constraints: ["knowledge_users_pkey", "knowledge_users_username_key", "knowledge_users_username_check"] },

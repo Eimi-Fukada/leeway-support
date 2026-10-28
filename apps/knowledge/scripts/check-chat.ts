@@ -1,0 +1,31 @@
+import { createHash,randomBytes,randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { createPool } from "../src/database.ts";
+import assert from "node:assert/strict";
+process.loadEnvFile(fileURLToPath(new URL("../.env",import.meta.url)));
+const pool=createPool(),token=randomBytes(32).toString("hex"),digest=createHash("sha256").update(token).digest("hex");
+const baseId="353b8542-32a0-4247-a5d4-4b367b5cc19d",threadId=`eval-${randomUUID()}`,requestId=randomUUID();
+try{
+ const user=(await pool.query("SELECT owner_id FROM public.knowledge_bases WHERE id=$1",[baseId])).rows[0].owner_id;
+ await pool.query("INSERT INTO public.knowledge_sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '15 minutes')",[digest,user]);
+ const endpoint=`http://127.0.0.1:3200/api/knowledge-bases/${baseId}/chat`,headers={"Content-Type":"application/json",Origin:"http://127.0.0.1:3200",Cookie:`leeway_knowledge_session=${token}`};
+ const question=process.argv[2]??"青禾专业月付多少钱？请先查询知识库并引用来源。",web=process.argv.includes("--web"),deep=process.argv.includes("--deep");
+ const body={threadId,requestId,message:question,options:{webSearch:web,thinkingMode:deep?"deep":"quick"}};
+ const response=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(body),signal:AbortSignal.timeout(200000)});
+ const stream=await response.text();const events=stream.split("\n\n").filter(x=>x.startsWith("data: ")).map(x=>JSON.parse(x.slice(6)));
+ const completed=events.find(e=>e.type==="CUSTOM"&&e.name==="support.result")?.value;
+ console.log(JSON.stringify({status:response.status,threadId,answer:completed?.answer,details:completed?.details?{options:completed.details.options,searchCalls:completed.details.searchCalls,citations:completed.details.citations.map((c:{id:string;title:string;kind:string})=>({id:c.id,title:c.title,kind:c.kind})),providerResponses:completed.details.providerResponses}:undefined}));
+ if(!response.ok||stream.includes('"type":"RUN_ERROR"')||!stream.includes('"name":"support.result"'))throw new Error("问答链路未完成");
+ const history=await fetch(`${endpoint}?thread=${threadId}`,{headers});const snapshot=await history.json();
+ console.log(JSON.stringify({historyStatus:history.status,status:snapshot.snapshot?.status,messages:snapshot.snapshot?.messages.length,requests:snapshot.snapshot?.requests.length}));
+ if(snapshot.snapshot?.status!=="completed")throw new Error("历史未完成");
+ const replay=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(body)});const replayText=await replay.text();
+ if(replayText.includes('"type":"RUN_ERROR"'))throw new Error("重放失败");
+ console.log(JSON.stringify({replay:"completed",requestCount:snapshot.snapshot.requests.length}));
+ const replayResult=replayText.split("\n\n").filter(x=>x.startsWith("data: ")).map(x=>JSON.parse(x.slice(6))).find(e=>e.type==="CUSTOM"&&e.name==="support.result")?.value;
+ assert.deepEqual(replayResult,completed,"重放应返回同一结果，JSONB 属性顺序不作为语义差异");
+ const conflict=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({...body,options:{...body.options,webSearch:!web}})});
+ if(conflict.status!==409)throw new Error("选项变化未拒绝");
+ const unauthorized=await fetch(`${endpoint}?thread=${threadId}`);if(unauthorized.status!==401)throw new Error("未登录未拒绝");
+ console.log(JSON.stringify({optionsConflict:conflict.status,unauthenticated:unauthorized.status}));
+}finally{await pool.query("DELETE FROM public.knowledge_sessions WHERE token_hash=$1",[digest]);await pool.end();}

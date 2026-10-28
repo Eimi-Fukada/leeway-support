@@ -19,7 +19,7 @@ test("真实 PostgreSQL：Agent SQL 可独立初始化全部表并重复执行�
       .replaceAll('"public".', "pg_temp.").replaceAll("public.", "pg_temp.");
     await client.query("BEGIN");
     await client.query(sql);
-    const expected = ["checkpoint_blobs", "checkpoint_migrations", "checkpoint_writes", "checkpoints", "support_conversation_messages", "support_conversation_requests", "support_information_forms", "support_memories", "support_memory_operations"];
+    const expected = ["checkpoint_blobs", "checkpoint_migrations", "checkpoint_writes", "checkpoints", "support_conversation_messages", "support_conversation_requests", "support_information_forms", "support_knowledge_threads", "support_memories", "support_memory_operations", "support_run_options", "support_service_nonces"];
     const tables = await client.query<{ relname: string }>("SELECT relname FROM pg_class WHERE relnamespace=pg_my_temp_schema() AND relkind='r' ORDER BY relname");
     assert.deepEqual(tables.rows.map((row) => row.relname), expected);
     await client.query("INSERT INTO pg_temp.support_conversation_requests(scope,thread_id,request_id,run_id,payload_hash,status) VALUES('scope','thread','message',$1,'hash','running')", [randomUUID()]);

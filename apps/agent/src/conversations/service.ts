@@ -7,6 +7,7 @@ export interface RequestRecord {
   kind: "message" | "resume" | "legacy";
   requestId: string; runId: string; payloadHash: string; status: "running" | "waiting_for_input" | "completed" | "failed" | "unknown";
   result: SupportRunResult | null; updatedAt: string;
+  requiresDetails?: boolean;
 }
 
 type RequestRow = Omit<RequestRecord, "updatedAt"> & { updatedAt: Date };
@@ -31,18 +32,18 @@ export class ConversationService {
   }
 
   async find(scope: string, thread: string, requestId: string): Promise<RequestRecord | undefined> {
-    const rows = await this.pool.query<RequestRow>(`SELECT request_kind AS kind,request_id AS "requestId",run_id AS "runId",payload_hash AS "payloadHash",status,result,
+    const rows = await this.pool.query<RequestRow>(`SELECT metadata_required AS "requiresDetails",request_kind AS kind,request_id AS "requestId",run_id AS "runId",payload_hash AS "payloadHash",status,result,
       updated_at AS "updatedAt" FROM public.support_conversation_requests WHERE scope=$1 AND thread_id=$2 AND request_id=$3`, [scope, thread, requestId]);
     return rows.rows[0] ? { ...rows.rows[0], updatedAt: rows.rows[0].updatedAt.toISOString() } : undefined;
   }
 
-  async start(scope: string, thread: string, requestId: string, runId: string, payloadHash: string, content: string, historyComplete = true, kind: RequestRecord["kind"] = "legacy") {
+  async start(scope: string, thread: string, requestId: string, runId: string, payloadHash: string, content: string, historyComplete = true, kind: RequestRecord["kind"] = "legacy", requiresDetails = false) {
     requestIdSchema.parse(requestId);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query(`INSERT INTO public.support_conversation_requests(scope,thread_id,request_id,run_id,payload_hash,status,history_complete,request_kind)
-        VALUES($1,$2,$3,$4,$5,'running',$6,$7)`, [scope, thread, requestId, runId, payloadHash, historyComplete, kind]);
+      await client.query(`INSERT INTO public.support_conversation_requests(scope,thread_id,request_id,run_id,payload_hash,status,history_complete,request_kind,metadata_required)
+        VALUES($1,$2,$3,$4,$5,'running',$6,$7,$8)`, [scope, thread, requestId, runId, payloadHash, historyComplete, kind, requiresDetails]);
       await client.query(`INSERT INTO public.support_conversation_messages(scope,thread_id,id,role,content,request_id)
         VALUES($1,$2,$3,'user',$4,$3)`, [scope, thread, requestId, content]);
       await client.query("COMMIT");

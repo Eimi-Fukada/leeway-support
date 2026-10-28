@@ -25,6 +25,7 @@ import {
 import { informationPause } from "../interactions/pause.ts";
 import type { ConversationBackend } from "../conversations/service.ts";
 import { executeRecorded, requestHash } from "../conversations/execution.ts";
+import { currentCapabilities } from "../knowledge/runtime.ts";
 
 export type SupportRunEvent =
   | { type: "text"; text: string; node: string }
@@ -49,7 +50,8 @@ export async function runSupportAgent(
     throw new Error("用户输入不能为空。");
   if (threadId !== undefined && !threadId.trim())
     throw new Error("会话标识不能为空。");
-  const payloadHash = requestHash(question, interaction?.submission);
+  const capabilities=currentCapabilities();
+  const payloadHash = requestHash(question, interaction?.submission,capabilities?.details.options);
   question = redactPii(question);
   const support =
     context === undefined ? undefined : validateSupportContext(context);
@@ -158,9 +160,9 @@ export async function runSupportAgent(
             signal: interaction?.signal
               ? AbortSignal.any([
                   interaction.signal,
-                  AbortSignal.timeout(65_000),
+                  AbortSignal.timeout(capabilities?180_000:65_000),
                 ])
-              : AbortSignal.timeout(65_000),
+              : AbortSignal.timeout(capabilities?180_000:65_000),
             context: {
               ...(support ? { support } : {}),
               ...(interaction ? { interaction: { runId: logicalRunId, ...(recorded ? { requestId: recorded.requestId } : {}) } } : {}),
@@ -217,6 +219,7 @@ export async function runSupportAgent(
               elapsedMs: Math.round(performance.now() - startedAt),
               runId: logicalRunId,
               information,
+              ...(capabilities?{details:capabilities.details}:{}),
             };
           }
         }
@@ -226,6 +229,7 @@ export async function runSupportAgent(
           answer,
           elapsedMs: Math.round(performance.now() - startedAt),
           runId: interaction ? logicalRunId : traceRunId,
+          ...(capabilities?{details:capabilities.details}:{}),
         };
         if (interaction?.submission)
           await interaction.service.record(
@@ -267,6 +271,7 @@ export async function runSupportAgent(
     return executeRecorded({ agent, forms: interaction.service, journal: interaction.conversation,
       scope: memoryScope(validateSupportContext(support)), thread: checkpointThreadId(threadId ?? "", support),
       requestId, payloadHash, question, submission: interaction.submission,
+      requiresDetails:!!capabilities,
       work: async (id, runId) => { recorded = { requestId: id, runId }; return execute(); } });
   };
   return interaction

@@ -16,7 +16,7 @@ export function errorResponse(error: unknown) {
   return error instanceof AppError ? json({ error: error.message }, error.status)
     : json({ error: "服务暂时无法连接，请稍后重试。" }, 503);
 }
-export async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request, maxBytes = 8192): Promise<unknown> {
   if (!request.headers.get("content-type")?.startsWith("application/json")) throw new AppError(415, "请求格式无效。");
   if (!request.body) throw new AppError(400, "请填写必要信息。");
   const reader = request.body.getReader();
@@ -26,7 +26,7 @@ export async function readJson(request: Request): Promise<unknown> {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > 8192) { await reader.cancel(); throw new AppError(413, "提交内容过长。"); }
+      if (bytes > maxBytes) { await reader.cancel(); throw new AppError(413, "提交内容过长。"); }
       parts.push(value);
     }
     return JSON.parse(Buffer.concat(parts).toString("utf8"));

@@ -58,8 +58,10 @@ export class KnowledgeService {
     if (!parsed.success) throw new AppError(400, parsed.error.issues[0]?.code === "unrecognized_keys"
       ? "提交内容包含无效字段。" : parsed.error.issues[0]?.message ?? "请检查知识库信息。");
     try {
-      const result = await this.pool.query<KnowledgeRow>(`INSERT INTO public.knowledge_bases(id,owner_id,name,description)
-        VALUES($1,$2,$3,$4) RETURNING id,name,description,created_at AS "createdAt"`,
+      const result = await this.pool.query<KnowledgeRow>(`WITH created AS (INSERT INTO public.knowledge_bases(id,owner_id,name,description)
+        VALUES($1,$2,$3,$4) RETURNING id,name,description,created_at), authorized AS (
+        INSERT INTO public.knowledge_application_grants(application_id,knowledge_base_id) SELECT 'knowledge-chat',id FROM created RETURNING knowledge_base_id)
+        SELECT c.id,c.name,c.description,c.created_at AS "createdAt" FROM created c JOIN authorized a ON a.knowledge_base_id=c.id`,
       [randomUUID(), userId, parsed.data.name, parsed.data.description]);
       const row = result.rows[0]!;
       return { ...row, createdAt: row.createdAt.toISOString() };

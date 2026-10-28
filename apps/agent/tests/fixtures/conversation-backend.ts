@@ -9,9 +9,9 @@ export class TestConversationBackend implements ConversationBackend {
   completeness = new Map<string, boolean>();
   key(scope: string, thread: string) { return `${scope}:${thread}`; }
   async find(scope: string, thread: string, requestId: string) { return this.records.get(`${this.key(scope, thread)}:${requestId}`); }
-  async start(scope: string, thread: string, requestId: string, runId: string, payloadHash: string, content: string, historyComplete = true, kind: RequestRecord["kind"] = "legacy") {
+  async start(scope: string, thread: string, requestId: string, runId: string, payloadHash: string, content: string, historyComplete = true, kind: RequestRecord["kind"] = "legacy",requiresDetails = false) {
     const key = this.key(scope, thread);
-    this.records.set(`${key}:${requestId}`, { kind, requestId, runId, payloadHash, status: "running", result: null, updatedAt: new Date().toISOString() });
+    this.records.set(`${key}:${requestId}`, { kind, requestId, runId, payloadHash, status: "running", result: null, updatedAt: new Date().toISOString(),requiresDetails });
     this.messages.set(key, [...this.messages.get(key) ?? [], { id: requestId, role: "user", content }]);
     this.completeness.set(key, historyComplete);
   }

@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { KnowledgeBase } from "../src/contracts.ts";
 import { Icon } from "./Icons.tsx";
+import { KnowledgeChat } from "./KnowledgeChat.tsx";
 import { MAX_FILE_BYTES, type StoredDocument } from "../src/documents/contracts.ts";
 import type { UploadFormat } from "../src/documents/parsers/types.ts";
 import { DocumentPreview } from "./DocumentPreview.tsx";
@@ -14,7 +15,7 @@ function fileSize(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// 原文件列表来自服务端；问答草稿仍仅在本库界面内，尚不调用 Agent。
+// 文件管理与真实问答各自维护状态，问答通过当前库的鉴权 BFF 调用原 Agent。
 export function KnowledgeDetail({ base, bases, uploadFormats }: { base: KnowledgeBase; bases: KnowledgeBase[]; uploadFormats: UploadFormat[] }) {
   const router = useRouter();
   const picker = useRef<HTMLInputElement>(null);
@@ -31,7 +32,6 @@ export function KnowledgeDetail({ base, bases, uploadFormats }: { base: Knowledg
   }, []);
   const uploads = useRef<AbortController | null>(null);
   const [search, setSearch] = useState("");
-  const [draft, setDraft] = useState("");
   const [view, setView] = useState<"documents" | "question">("documents");
   const visibleFiles = files.filter((file: StoredDocument) => file.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   const busy = queue.some((item: UploadItem) => item.status === "uploading");
@@ -99,13 +99,7 @@ export function KnowledgeDetail({ base, bases, uploadFormats }: { base: Knowledg
         : <ul className="file-rows">{visibleFiles.map((file: StoredDocument) => <li key={file.id} className="document-row"><button type="button" className="file-preview-button" aria-label={`预览：${file.name}`} onClick={() => setPreview(file)}><span className="file-symbol"><Icon name="file" size={22}/></span><span className="file-info"><strong title={file.name}>{file.name}</strong><span>{fileSize(file.size)}<i/>原文已保存</span></span><Icon name="eye" size={17}/></button><button type="button" className={`processing-status-button ${file.processing.status}`} aria-label={`查看处理进度：${file.name}，${PROCESSING_LABELS[file.processing.status]}`} aria-haspopup="dialog" onClick={() => setProcessingDocument(file)}><span aria-hidden="true"/>{PROCESSING_LABELS[file.processing.status]}<Icon name="arrow" size={13}/></button></li>)}</ul>}
       </div><footer className="document-footer"><Icon name="lock" size={13}/><span>资料与问答围绕当前知识库展开</span></footer>
     </section>
-    <section className="qa-panel" aria-labelledby="qa-title">
-      <header className="qa-toolbar"><div><span className="qa-scope-dot"/>当前知识库<span className="qa-library-name">{base.name}</span></div><div className="qa-toolbar-actions"><button className="icon-button" type="button" disabled aria-label="新建库内会话" title="问答开放后可新建会话"><Icon name="plus" size={19}/></button><button className="icon-button" type="button" disabled aria-label="库内会话历史" title="问答开放后可查看历史"><Icon name="history" size={19}/></button></div></header>
-      <div className="qa-welcome"><div className="qa-illustration"><span className="qa-paper paper-one"/><span className="qa-paper paper-two"/><span className="qa-bubble"><Icon name="chat" size={30}/></span><span className="qa-leaf"/></div><span className="eyebrow">A CONVERSATION WITH YOUR KNOWLEDGE</span><h2 id="qa-title">让资料，给你一些启发。</h2><p>围绕「{base.name}」提问，<br/>从知识中找到答案，也找到来源。</p>
-        <div className="question-suggestions">{["这个知识库主要讲了什么？", "帮我梳理关键内容"].map((question: string) => <button type="button" key={question} onClick={() => setDraft(question)}>{question}<Icon name="arrow" size={14}/></button>)}</div>
-      </div>
-      <div className="qa-composer-area"><div className="qa-composer"><textarea aria-label="基于当前知识库提问" value={draft} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.currentTarget.value)} maxLength={4000} placeholder={`基于「${base.name}」提问…`} rows={3} aria-describedby="qa-availability"/><div className="qa-composer-bottom"><span className="qa-library-chip"><Icon name="book" size={14}/><span>{base.name}</span></span><button type="button" className="send-button" disabled aria-label="发送提问" title="知识库问答即将开放"><Icon name="send" size={18}/></button></div></div><p id="qa-availability" className="qa-disclaimer">知识库问答即将开放 · 当前仅可编辑提问草稿</p></div>
-    </section>
+    <KnowledgeChat key={base.id} baseId={base.id} name={base.name}/>
     {preview && <DocumentPreview key={preview.id} document={preview} libraryId={base.id} onClose={() => setPreview(undefined)}/>}
     {processingDocument && <DocumentProcessing key={processingDocument.id} document={processingDocument} libraryId={base.id} onClose={() => { setProcessingDocument(undefined); setRefresh((value) => value+1); }} onUpdate={updateProcessing}/>}
   </div>;

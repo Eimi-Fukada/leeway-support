@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS public.support_conversation_messages (
 );
 ALTER TABLE public.support_conversation_requests ADD COLUMN IF NOT EXISTS history_complete boolean NOT NULL DEFAULT true;
 ALTER TABLE public.support_conversation_requests ADD COLUMN IF NOT EXISTS request_kind text NOT NULL DEFAULT 'legacy';
+ALTER TABLE public.support_conversation_requests ADD COLUMN IF NOT EXISTS metadata_required boolean NOT NULL DEFAULT false;

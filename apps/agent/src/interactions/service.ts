@@ -5,7 +5,7 @@ import { informationSpecSchema, submissionSchema, InformationError, validateAnsw
 import { redactPii } from "../agent/middleware/pii.ts";
 import { readSupportSchema } from "../config/schema.ts";
 
-export interface SupportRunResult { answer: string; elapsedMs: number; runId: string; status: "completed" | "waiting_for_input"; information?: InformationForm; reconciled?: boolean }
+export interface SupportRunResult { answer: string; elapsedMs: number; runId: string; status: "completed" | "waiting_for_input"; information?: InformationForm; reconciled?: boolean; details?: import("../knowledge/runtime.ts").RunDetails }
 // 执行层依赖这些能力；测试可注入无数据库实现，真实入口始终使用 PostgreSQL。
 export type InformationBackend = Pick<InformationService, "withThread" | "begin" | "create" | "finish" | "get" | "accept" | "record" | "wait" | "replay" | "confirm">;
 interface Row { id: string; scope: string; thread_id: string; run_id: string; tool_call_id: string;

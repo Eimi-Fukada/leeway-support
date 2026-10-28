@@ -1,5 +1,7 @@
 # 客服产品与 Agent 实践的双向学习覆盖
 
+2026-10-28/29 实施更新：[统一 Agent 执行方案](agent-knowledge-search-execution-plan.md) 的 S1–S6 已接通，S7 已执行本地功能、真实存储/HTTP/GPT 和浏览器验收，见 [记录](iterations/unified-agent-knowledge-web-reasoning.md)。联网与思考使用 GPT 原生能力；远端搜索硬预算仍为生产门槛，不将本地验收等同生产发布。
+
 更新：2026-10-25。状态：开发与学习约定，缺口清单待逐项实施。
 
 ## 两个仓库如何配合
@@ -29,7 +31,9 @@
 | 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts` 作对照 | G3 补资料已在原产品中持久 interrupt/resume，支持填写/取消、刷新与跨进程恢复、表单幂等和预算连续；见 [迭代](iterations/information-interrupt.md)。业务写入审批、人工认领与接管未实现 |
 | 子 Agent / 并行 H | `subagent.ts`、`subagent-middleware.ts`、`apps/support-chat/openui/parallel/` | 诊断委派与上下文隔离；受限权限、总预算、超时及部分失败 |
 | 知识入库 I1–I3 | `检索策略.md` 为思路资料；待补 `labs/knowledge-ingestion/` | 文档解析、切块、原文定位、版本、发布撤回；上传不等于可检索 |
-| RAG I1–I3 | 待补 `labs/rag/`，实际实验仓库无独立嵌入/分块/Qdrant 实验 | 已完成上传至真实 Qdrant 的入库、逐项读回确认、状态查询与未知结果核对；尚无业务检索 API 和 Agent 问答。后续 dense/关键词融合与可选 rerank；无答案与检索失败不同 |
+| RAG I1–I3 | 实际实验仓库无独立完整 RAG 实验，本轮通过产品检索/工具/评估覆盖 | 入库之后已接范围受控 dense 检索、证据与来源核对、search_knowledge 和库内问答；12 条真实查询中 8 条有答案来源均召回。无答案候选不等于能回答，混合检索/rerank 后续按评估推进 |
+| GPT 原生思考与联网 | 实际 `E:/GraceProject/agent-practice` 的 `shared/model.ts` 等作对照，无独立完整验收；通过产品切片学习 | 已接 quick/deep→low/high 与内置 web_search；真实请求参数/搜索调用/引用通过，选项幂等与隔离、联网禁模糊重试已覆盖；接入端不支持 max_tool_calls，生产硬预算未通过 |
+| 应用授权与检索证据传递 | 工具与 CopilotKit 示例作机制对照，不跨仓库导入 | 已接双向签名、session 委托、应用 grant、库/会话/记忆隔离、ToolMessage 证据、引用与 unknown 恢复；真实 HTTP 与表单恢复验证通过，真实业务系统仍未集成 |
 | MCP I4–I5 | 待补 `labs/mcp/` | 同一只读业务能力从本地函数迁移到远端工具；参数、结果、错误和身份边界一致 |
 | 宿主页面动作 / 业务事件 I7–I8 | CopilotKit 已有页面上下文/前端工具；待补 `labs/business-events/` | 页面跳转/填草稿、服务端业务命令、主动事件推送分别验证；重放、重复与乱序有定义 |
 | 正式 SDK I6 | 现有 UI 示例作输入；待补 `labs/embedded-sdk/` | 在独立宿主接入，验证公开协议、身份交换、事件/确认/重连和版本兼容 |

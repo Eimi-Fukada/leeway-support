@@ -12,7 +12,8 @@
     "worker": "tsx scripts/worker.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:postgres": "tsx --test tests/postgres.integration.ts tests/documents.postgres.ts tests/schema.postgres.ts tests/ingestion.postgres.ts tests/embeddings.postgres.ts",
-    "test:qdrant": "tsx --test tests/indexing.qdrant.ts"
+    "test:qdrant": "tsx --test tests/indexing.qdrant.ts",
+    "test:http": "tsx --test tests/integration-auth.postgres.ts"
   },
   "dependencies": {
     "@langchain/core": "1.2.20",

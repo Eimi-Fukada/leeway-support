@@ -21,6 +21,7 @@ type Agent = ReturnType<typeof createSupportAgent>;
 export function requestHash(
   question: string,
   submission?: InformationSubmission,
+  options?: unknown,
 ) {
   const payload = submission
     ? {
@@ -33,7 +34,7 @@ export function requestHash(
         ),
       }
     : { question };
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  return createHash("sha256").update(JSON.stringify(options===undefined?payload:{payload,options})).digest("hex");
 }
 
 // 调用方须已持有会话锁；这里只核对，不会 invoke/stream 或重新执行工具。
@@ -58,6 +59,7 @@ export async function reconcileRequest(
     receipt.success &&
     receipt.data.requestId === record.requestId &&
     receipt.data.runId === record.runId
+    && (!record.requiresDetails || receipt.data.details !== undefined)
   ) {
     const result: SupportRunResult = {
       status: "completed",
@@ -65,6 +67,7 @@ export async function reconcileRequest(
       runId: receipt.data.runId,
       elapsedMs: 0,
       reconciled: true,
+      ...(receipt.data.details?{details:receipt.data.details}:{}),
     };
     await forms.confirm(scope, thread, record.requestId, result);
     await journal.finish(scope, thread, record.requestId, result);
@@ -77,6 +80,11 @@ export async function reconcileRequest(
     }
     // 恢复请求继承原逻辑 runId；旧暂停点不能证明本次 resume 已经执行。
     if (record.kind === "message" && pause && pause.runId === record.runId) {
+      // interrupt 本身只能证明暂停，不能重建已经丢失的知识/网页来源清单。
+      if(record.requiresDetails&&!record.result?.details){
+        await journal.uncertain(scope,thread,record.requestId,"unknown");
+        return (await journal.find(scope,thread,record.requestId))!;
+      }
       const information = await forms.wait(
         scope,
         thread,
@@ -91,6 +99,7 @@ export async function reconcileRequest(
         elapsedMs: 0,
         reconciled: true,
         information,
+        ...(record.result?.details?{details:record.result.details}:{}),
       });
     } else
       await journal.uncertain(
@@ -113,6 +122,7 @@ export async function executeRecorded(options: {
   payloadHash: string;
   question: string;
   submission?: InformationSubmission;
+  requiresDetails?: boolean;
   work: (requestId: string, runId: string) => Promise<SupportRunResult>;
 }) {
   const {
@@ -228,6 +238,7 @@ export async function executeRecorded(options: {
     content,
     historyComplete,
     submission ? "resume" : "message",
+    options.requiresDetails ?? false,
   );
   try {
     const result = await options.work(requestId, runId);
@@ -305,7 +316,7 @@ export async function conversationSnapshot(
     ...history,
     status,
     historyComplete,
-    ...(information ? { information } : {}),
+    ...(information && status === "waiting_for_input" ? { information } : {}),
     ...(!historyComplete
       ? {
           notice:

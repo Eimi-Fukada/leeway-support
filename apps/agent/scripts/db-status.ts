@@ -3,6 +3,9 @@ import { createDatabasePool } from "../src/config/database.ts";
 import { inspectDatabase, printDatabaseStatus, type TableCheck } from "../../../scripts/database-status.ts";
 
 export const agentTables: TableCheck[] = [
+  {name:"support_service_nonces",file:"004_knowledge_runs.sql",columns:{caller:"text!",nonce:"uuid!",expires_at:"timestamptz!"},constraints:["support_service_nonces_pkey"]},
+  {name:"support_knowledge_threads",file:"004_knowledge_runs.sql",columns:{scope:"text!",thread_id:"text!",base_id:"uuid!",revision:"text!"},constraints:["support_knowledge_threads_pkey"]},
+  {name:"support_run_options",file:"004_knowledge_runs.sql",columns:{scope:"text!",thread_id:"text!",request_id:"text!",options:"jsonb!"},constraints:["support_run_options_pkey"]},
   { name: "support_memories", file: "001_long_term_memory.sql",
     columns: { scope: "text!", id: "uuid!", version: "int4!", content: "text!", deleted: "bool!", source: "jsonb!", created_at: "timestamptz!", updated_at: "timestamptz!" },
     constraints: ["support_memories_pkey", "support_memories_version_check"], indexes: ["support_memories_pkey"] },
@@ -14,7 +17,7 @@ export const agentTables: TableCheck[] = [
     constraints: ["support_information_forms_pkey", "support_information_forms_status_check", "support_information_forms_scope_thread_id_run_id_key"],
     indexes: ["support_information_forms_pkey", "support_information_forms_scope_thread_id_run_id_key", "support_information_forms_thread"] },
   { name: "support_conversation_requests", file: "003_conversations.sql",
-    columns: { scope: "text!", thread_id: "text!", request_id: "text!", run_id: "uuid!", payload_hash: "text!", status: "text!", history_complete: "bool!", request_kind: "text!", result: "jsonb", created_at: "timestamptz!", updated_at: "timestamptz!", sequence: "int8!" },
+    columns: { scope: "text!", thread_id: "text!", request_id: "text!", run_id: "uuid!", payload_hash: "text!", status: "text!", history_complete: "bool!", metadata_required: "bool!", request_kind: "text!", result: "jsonb", created_at: "timestamptz!", updated_at: "timestamptz!", sequence: "int8!" },
     constraints: ["support_conversation_requests_pkey", "support_conversation_requests_status_check"], indexes: ["support_conversation_requests_pkey"] },
   { name: "support_conversation_messages", file: "003_conversations.sql",
     columns: { scope: "text!", thread_id: "text!", id: "text!", role: "text!", content: "text!", request_id: "text!", sequence: "int8!", created_at: "timestamptz!" },

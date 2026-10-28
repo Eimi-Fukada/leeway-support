@@ -13,5 +13,6 @@ coverage/
 .playwright-mcp
 .playwright-cli/
 /output/playwright/
+/output/integration/
 /artifacts
 docs/*

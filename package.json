@@ -21,6 +21,7 @@
     "db:status": "pnpm -r --no-bail --workspace-concurrency=1 run db:status",
     "knowledge:test:postgres": "pnpm --filter @leeway-support/knowledge test:postgres",
     "knowledge:test:qdrant": "pnpm --filter @leeway-support/knowledge test:qdrant",
+    "knowledge:test:http": "pnpm --filter @leeway-support/knowledge test:http",
     "build": "turbo run build",
     "test": "turbo run test",
     "test:postgres": "pnpm --filter @leeway-support/agent test:postgres",

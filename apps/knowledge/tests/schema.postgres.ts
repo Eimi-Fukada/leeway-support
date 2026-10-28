@@ -15,7 +15,7 @@ test("真实 PostgreSQL：SQL 目录可独立初始化全部表，重复执行�
     const directory = new URL("../sql/", import.meta.url);
     const names = (await readdir(directory)).filter((name: string) => /^\d+.*\.sql$/.test(name)).sort();
     const sql = (await Promise.all(names.map((name: string) => readFile(new URL(name, directory), "utf8")))).join("\n");
-    const expected = ["knowledge_bases", "knowledge_document_chunks", "knowledge_document_contents", "knowledge_documents", "knowledge_sessions", "knowledge_users"];
+    const expected = ["knowledge_application_grants", "knowledge_bases", "knowledge_document_chunks", "knowledge_document_contents", "knowledge_documents", "knowledge_retrievals", "knowledge_service_nonces", "knowledge_sessions", "knowledge_users"];
     const definitions = [...sql.matchAll(/CREATE TABLE IF NOT EXISTS public\.(knowledge_\w+)/g)].map((match) => match[1]).sort();
     assert.deepEqual(definitions, expected);
     // 用当前产品数据库连接的临时表验证空结构，绝不删除或改写 public 中的实际数据。
@@ -39,7 +39,7 @@ test("真实 PostgreSQL：SQL 目录可独立初始化全部表，重复执行�
       (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "23505");
     await client.query("ROLLBACK TO SAVEPOINT duplicate_name");
     const foreignKeys = await client.query<{ count: number }>("SELECT count(*)::int AS count FROM pg_constraint WHERE connamespace=pg_my_temp_schema() AND contype='f'");
-    assert.equal(foreignKeys.rows[0]!.count, 5);
+    assert.equal(foreignKeys.rows[0]!.count, 8);
     const doc="fef08888-8888-4888-8888-888888888888";
     await client.query(`INSERT INTO pg_temp.knowledge_documents(id,knowledge_base_id,name,kind,size,sha256,storage_key,processing_status,embedding_profile)
       VALUES($1,'fef01111-1111-4111-8111-111111111111','向量完成.txt','text',10,$2,$3,'embedded','{"model":"test","dimensions":3}')`,[doc,"a".repeat(64),"fef09999-9999-4999-8999-999999999999"]);

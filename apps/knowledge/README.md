@@ -172,3 +172,13 @@ corepack pnpm --filter @leeway-support/knowledge typecheck
 PostgreSQL 测试使用随机 it- 用户与其知识库，结束后只清理这些记录；另用临时表验证 SQL 完整性和只读状态检查。运行截图保存在根目录 output/playwright/knowledge，默认不提交。
 
 运行 PostgreSQL/Qdrant 集成测试时先暂停常驻 worker，避免它领取测试创建的待处理记录；测试完成后再启动 worker。Qdrant 测试创建随机 test_ 集合，结束后只清理这些集合。
+
+## 统一 Agent 问答
+
+库内问答已接原 Agent，支持 GPT 原生联网搜索和快速/深度（low/high），包含来源、刷新恢复、补资料与停止。完整实施、验收和生产限制见 [记录](../../docs/iterations/unified-agent-knowledge-web-reasoning.md)。
+
+先在根目录运行 `node scripts/init-knowledge-integration.mjs` 配置两端服务密钥，然后 `pnpm db:init`。默认地址为 Knowledge 3200、Agent 3100。分别启动两个应用，不能只启动 Knowledge 页面。
+
+新建库会原子授权给固定内置 knowledge-chat 应用；现有库需显式运行 `pnpm --filter @leeway-support/knowledge exec tsx scripts/grant-application.ts <库UUID>`。没有 grant 时拒绝，不搜索其他库。原文和会话仍要求真实登录，服务密钥不能放浏览器。
+
+额外 `pnpm knowledge:test:http` 需要两个服务已运行。`scripts/check-*.ts` 是显式真实模型验收脚本，会产生模型调用，不在默认单元测试中。当前供应商不支持远端搜索硬次数参数；本地功能已验收，生产预算门槛尚未通过。

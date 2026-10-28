@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createMiddleware, modelRetryMiddleware } from "langchain";
 import type { WrapModelCallHook } from "langchain";
+import { currentCapabilities } from "../../knowledge/runtime.ts";
 
 // 每次运行独立的观察状态；不放在全局变量或 checkpoint 中，不跨会话共享。
 const progress = new AsyncLocalStorage<{ emitted: boolean }>();
@@ -38,6 +39,8 @@ export function createModelRetryMiddleware() {
     name: "SupportModelRetry",
     wrapModelCall: async (request, handler) => {
       const startedAt = performance.now();
+      // 原生搜索可能在供应商侧已经执行，即使尚无文本也不能自动重新发起。
+      if(currentCapabilities()?.details.options.webSearch)return handler(request);
       // 官方重试负责次数/退避；每次调用单独创建过滤闭包。
       const retry = modelRetryMiddleware({
         maxRetries: 1,

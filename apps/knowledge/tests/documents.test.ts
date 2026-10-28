@@ -15,7 +15,7 @@ test("文件校验：名称路径、空文件、超限、扩展名伪装和非�
   await assert.rejects(validateDocument("a.txt", Buffer.alloc(0)), /空文件/);
   await assert.rejects(validateDocument("a.txt", Buffer.alloc(MAX_FILE_BYTES + 1)), /10 MB/);
   await assert.rejects(validateDocument("a.html", Buffer.from("hello")), /暂时支持/);
-  await assert.rejects(validateDocument("a.pdf", Buffer.from("not-pdf")), /不是 PDF/);
+  await assert.rejects(validateDocument("a.pdf", Buffer.from("%PDF-1.4\n%%EOF")), /暂时支持/);
   await assert.rejects(validateDocument("a.docx", Buffer.from("not-docx")), /Word 文件/);
   await assert.rejects(validateDocument("a.txt", Buffer.from([0xff, 0x00])), /UTF-8/);
   assert.equal(await validateDocument("a.md", Buffer.from("# 测试\n正文")), "markdown");

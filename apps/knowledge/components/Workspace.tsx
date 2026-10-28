@@ -5,8 +5,9 @@ import Link from "next/link";
 import type { KnowledgeBase, User } from "../src/contracts.ts";
 import { Icon } from "./Icons.tsx";
 import { KnowledgeDetail } from "./KnowledgeDetail.tsx";
+import type { UploadFormat } from "../src/documents/parsers/types.ts";
 
-export function Workspace({ user, initialBases, selectedBaseId }: { user: User; initialBases: KnowledgeBase[]; selectedBaseId?: string }) {
+export function Workspace({ user, initialBases, selectedBaseId, uploadFormats }: { user: User; initialBases: KnowledgeBase[]; selectedBaseId?: string; uploadFormats: UploadFormat[] }) {
   const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -52,7 +53,7 @@ export function Workspace({ user, initialBases, selectedBaseId }: { user: User; 
       <div className="sidebar-bottom"><div className="user-line"><span className="avatar">S</span><div>{user.username}<small>空间管理员</small></div></div>
         <button className="logout-button" onClick={() => void logout()} disabled={leaving}><Icon name="logout" size={18}/>{leaving ? "正在退出…" : "退出登录"}</button>{logoutError && <p className="error" role="alert">{logoutError}</p>}</div>
     </aside>
-    {selectedBase ? <main id="main" className="detail-main"><KnowledgeDetail key={selectedBase.id} base={selectedBase} bases={bases}/>{notice && <p className="detail-notice" role="status">{notice}</p>}</main> : <main id="main" className="library-main"><header className="topbar"><span>我的空间 <span className="breadcrumb-divider">/</span> <strong>知识库</strong></span><span className="space-indicator"><i/> 只属于你的积累</span></header>
+    {selectedBase ? <main id="main" className="detail-main"><KnowledgeDetail key={selectedBase.id} base={selectedBase} bases={bases} uploadFormats={uploadFormats}/>{notice && <p className="detail-notice" role="status">{notice}</p>}</main> : <main id="main" className="library-main"><header className="topbar"><span>我的空间 <span className="breadcrumb-divider">/</span> <strong>知识库</strong></span><span className="space-indicator"><i/> 只属于你的积累</span></header>
       <section className="library-content"><div className="section-header"><div><span className="eyebrow">YOUR KNOWLEDGE, TOGETHER</span><h1>我的知识库<span className="count">{bases.length}</span></h1><p className="muted">把相关的资料放在一起，让知识有序生长。</p></div>{bases.length > 0 && <button className="primary-button" onClick={open}><Icon name="plus" size={18}/>新建知识库</button>}</div>
       <p className="success-message" role="status">{notice}</p>
       {bases.length === 0 ? <div className="empty-state"><div className="empty-symbol"><Icon name="book" size={46}/><span className="empty-leaf"/></div><h2>从第一个知识库开始</h2><p>为一个主题留出空间，<br/>慢慢收集属于它的资料与灵感。</p><button className="primary-button" onClick={open}><Icon name="plus" size={18}/>新建知识库</button><span className="empty-hint">按产品、主题或用途，自由整理</span></div>

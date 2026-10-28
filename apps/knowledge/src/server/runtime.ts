@@ -6,15 +6,22 @@ import { createPool } from "../database.ts";
 import { KnowledgeService } from "../service.ts";
 import { DocumentService } from "../documents/service.ts";
 import { LocalDocumentStorage } from "../documents/storage.ts";
+import { QdrantStore,readQdrantConfig } from "../indexing/qdrant.ts";
+import { IndexProcessor } from "../indexing/processor.ts";
 
 export const SESSION_COOKIE = "leeway_knowledge_session";
-const shared = globalThis as typeof globalThis & { knowledgeService?: KnowledgeService; knowledgeDocuments?: DocumentService };
+// 只跨热更新复用连接池；业务类实例跟随模块更新，避免仍调用旧版方法或缺少新增接口。
+const shared = globalThis as typeof globalThis & { knowledgePool?: ReturnType<typeof createPool> };
+let knowledgeService: KnowledgeService | undefined;
+let knowledgeDocuments: DocumentService | undefined;
+function pool() { return shared.knowledgePool ??= createPool(); }
 export function service(): KnowledgeService {
-  return shared.knowledgeService ??= new KnowledgeService(createPool());
+  return knowledgeService ??= new KnowledgeService(pool());
 }
 export function documents(): DocumentService {
-  return shared.knowledgeDocuments ??= new DocumentService(createPool(), new LocalDocumentStorage());
+  return knowledgeDocuments ??= new DocumentService(pool(), new LocalDocumentStorage());
 }
+export function indexing():IndexProcessor{return new IndexProcessor(pool(),new QdrantStore(readQdrantConfig()));}
 export const currentUser = cache(async () => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   return token ? service().user(token) : null;

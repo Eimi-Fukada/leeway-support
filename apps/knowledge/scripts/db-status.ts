@@ -15,10 +15,16 @@ export const knowledgeTables: TableCheck[] = [
     columns: { id: "uuid!", owner_id: "uuid!", name: "text!", description: "text!", created_at: "timestamptz!" },
     constraints: ["knowledge_bases_pkey", "knowledge_bases_owner_id_fkey", "knowledge_bases_name_check", "knowledge_bases_description_check"],
     indexes: ["knowledge_bases_pkey", "knowledge_bases_owner_name"] },
-  { name: "knowledge_documents", file: "003_documents.sql",
-    columns: { id: "uuid!", knowledge_base_id: "uuid!", name: "text!", kind: "text!", size: "int4!", sha256: "text!", storage_key: "uuid!", created_at: "timestamptz!" },
-    constraints: ["knowledge_documents_pkey", "knowledge_documents_knowledge_base_id_fkey", "knowledge_documents_name_check", "knowledge_documents_kind_check", "knowledge_documents_size_check", "knowledge_documents_sha256_check", "knowledge_documents_storage_key_key", "knowledge_documents_knowledge_base_id_sha256_key"],
+  { name: "knowledge_documents", file: "003_documents.sql – 007_qdrant_index.sql",
+    columns: { id: "uuid!", knowledge_base_id: "uuid!", name: "text!", kind: "text!", size: "int4!", sha256: "text!", storage_key: "uuid!", created_at: "timestamptz!", processing_status: "text!", processing_failed_stage: "text", processing_error_code: "text", processing_updated_at: "timestamptz!", processing_run_id: "uuid", processing_lease_expires_at: "timestamptz", processing_attempt: "int4!", embedding_profile:"jsonb",index_target:"jsonb",index_receipt:"jsonb" },
+    constraints: ["knowledge_documents_pkey", "knowledge_documents_knowledge_base_id_fkey", "knowledge_documents_name_check", "knowledge_documents_kind_check", "knowledge_documents_size_check", "knowledge_documents_sha256_check", "knowledge_documents_storage_key_key", "knowledge_documents_knowledge_base_id_sha256_key", "knowledge_documents_processing_status_check", "knowledge_documents_processing_failed_stage_check", "knowledge_documents_processing_error_code_check", "knowledge_documents_processing_consistency", "knowledge_documents_index_target_check", "knowledge_documents_index_receipt_check"],
     indexes: ["knowledge_documents_pkey", "knowledge_documents_storage_key_key", "knowledge_documents_knowledge_base_id_sha256_key", "knowledge_documents_library"] },
+  { name: "knowledge_document_contents", file: "005_document_ingestion.sql",
+    columns: { document_id: "uuid!", source_sha256: "text!", parser_id: "text!", parser_version: "text!", text: "text!", sections: "jsonb!", warnings: "jsonb!", splitter_config: "jsonb!", created_at: "timestamptz!" },
+    constraints: ["knowledge_document_contents_pkey", "knowledge_document_contents_document_id_fkey"], indexes: ["knowledge_document_contents_pkey"] },
+  { name: "knowledge_document_chunks", file: "005_document_ingestion.sql + 006_document_embeddings.sql",
+    columns: { id: "uuid!", document_id: "uuid!", ordinal: "int4!", text: "text!", heading_path: "jsonb!", section_index: "int4!", start_offset: "int4!", end_offset: "int4!", content_sha256: "text!", embedding:"jsonb" },
+    constraints: ["knowledge_document_chunks_pkey", "knowledge_document_chunks_document_id_fkey", "knowledge_document_chunks_document_id_ordinal_key", "knowledge_document_chunks_embedding_check"], indexes: ["knowledge_document_chunks_pkey", "knowledge_document_chunks_document_id_ordinal_key"] },
 ];
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

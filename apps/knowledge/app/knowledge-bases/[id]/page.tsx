@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Workspace } from "../../../components/Workspace.tsx";
 import { requireUser, service } from "../../../src/server/runtime.ts";
+import { uploadFormats } from "../../../src/documents/parsers/index.ts";
 
 export const dynamic = "force-dynamic";
 export default async function KnowledgePage({ params }: { params: Promise<{ id: string }> }) {
@@ -8,5 +9,5 @@ export default async function KnowledgePage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const bases = await service().list(user.id);
   if (!bases.some((base) => base.id === id)) notFound();
-  return <Workspace user={user} initialBases={bases} selectedBaseId={id}/>;
+  return <Workspace user={user} initialBases={bases} selectedBaseId={id} uploadFormats={uploadFormats()}/>;
 }

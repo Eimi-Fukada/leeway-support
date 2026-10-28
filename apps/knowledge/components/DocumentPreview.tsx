@@ -23,6 +23,6 @@ export function DocumentPreview({ libraryId, document, onClose }: { libraryId: s
     <div className="document-preview-content">{document.kind === "pdf" ? <><iframe title={`PDF 预览：${document.name}`} src={`${url}/original#toolbar=1`} referrerPolicy="no-referrer"/><p className="preview-footnote">如浏览器不支持 PDF 预览，可下载原文查看。</p></>
       : error ? <p className="error" role="alert">{error}</p> : !preview ? <p className="muted" role="status">正在读取原文…</p>
       : <><pre>{preview.text || "（文件没有可展示的文本内容）"}</pre>{preview.truncated && <p className="preview-footnote">内容较长，仅显示前 100,000 字符，可下载查看全文。</p>}</>}
-    </div><footer>原文件已保存 · 尚未进行知识解析与索引{document.kind === "docx" && " · Word 以纯文本展示"}</footer>
+    </div><footer>原文件已保存{document.kind === "docx" && " · Word 以纯文本展示"}</footer>
   </dialog>;
 }

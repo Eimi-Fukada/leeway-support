@@ -9,11 +9,16 @@
     "typecheck": "next typegen && tsc --noEmit",
     "db:init": "tsx scripts/init-db.ts",
     "db:status": "tsx scripts/db-status.ts",
+    "worker": "tsx scripts/worker.ts",
     "test": "tsx --test tests/*.test.ts",
-    "test:postgres": "tsx --test tests/postgres.integration.ts tests/documents.postgres.ts tests/schema.postgres.ts"
+    "test:postgres": "tsx --test tests/postgres.integration.ts tests/documents.postgres.ts tests/schema.postgres.ts tests/ingestion.postgres.ts tests/embeddings.postgres.ts",
+    "test:qdrant": "tsx --test tests/indexing.qdrant.ts"
   },
   "dependencies": {
+    "@langchain/core": "1.2.20",
+    "@langchain/textsplitters": "1.0.2",
     "mammoth": "1.11.0",
+    "marked": "18.1.2",
     "next": "16.4.3",
     "pg": "8.23.1",
     "react": "19.3.1",

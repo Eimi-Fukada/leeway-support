@@ -29,12 +29,20 @@
 | 显式工作流与人工 G | `apps/support-chat/hitl/`、`time-travel/agent.ts` 作对照 | G3 补资料已在原产品中持久 interrupt/resume，支持填写/取消、刷新与跨进程恢复、表单幂等和预算连续；见 [迭代](iterations/information-interrupt.md)。业务写入审批、人工认领与接管未实现 |
 | 子 Agent / 并行 H | `subagent.ts`、`subagent-middleware.ts`、`apps/support-chat/openui/parallel/` | 诊断委派与上下文隔离；受限权限、总预算、超时及部分失败 |
 | 知识入库 I1–I3 | `检索策略.md` 为思路资料；待补 `labs/knowledge-ingestion/` | 文档解析、切块、原文定位、版本、发布撤回；上传不等于可检索 |
-| RAG I1–I3 | 待补 `labs/rag/` | 先固定证据和引用，再 embedding、dense/关键词融合、可选 rerank；无答案与检索失败不同 |
+| RAG I1–I3 | 待补 `labs/rag/`，实际实验仓库无独立嵌入/分块/Qdrant 实验 | 已完成上传至真实 Qdrant 的入库、逐项读回确认、状态查询与未知结果核对；尚无业务检索 API 和 Agent 问答。后续 dense/关键词融合与可选 rerank；无答案与检索失败不同 |
 | MCP I4–I5 | 待补 `labs/mcp/` | 同一只读业务能力从本地函数迁移到远端工具；参数、结果、错误和身份边界一致 |
 | 宿主页面动作 / 业务事件 I7–I8 | CopilotKit 已有页面上下文/前端工具；待补 `labs/business-events/` | 页面跳转/填草稿、服务端业务命令、主动事件推送分别验证；重放、重复与乱序有定义 |
 | 正式 SDK I6 | 现有 UI 示例作输入；待补 `labs/embedded-sdk/` | 在独立宿主接入，验证公开协议、身份交换、事件/确认/重连和版本兼容 |
 | 运营报表 / DSL | `apps/support-chat/openui/` | 白名单组件和数据源；报表需求出现再装配，不与核心客服链路绑定 |
 | 观测、评估与运行 J | 现有主题测试与模型配置供对照；LangSmith 治理由当前产品接入及 `tests/tracing.test.ts` 覆盖，不另建 demo | 已接可选 LangSmith Tracer、每轮 runId、会话关联、基础凭据过滤与退出提交；28 个本地回归用例通过。缺 Key，真实云接收未验收；调用预算、答案评估及外围故障记录仍待实现 |
+
+2026-10-27 入库进度：完成现有文档表的持久处理状态与只读 processing 接口、列表状态按钮和五步详情，无计数或百分比。未接入执行器/切分/模型/Qdrant，文本为待处理、其他格式仅预览。四张知识库表数量不变，004 SQL 兼容旧数据且重复执行不重置状态，db:status 已补齐检查。14 项确定性、8 项真实 PostgreSQL，以及真实 HTTP 与浏览器验证通过；浏览器处理阶段使用隔离测试记录，503 使用故障模拟，不代表真实入库。详见 [迭代](iterations/knowledge-document-processing-status.md)。
+
+2026-10-27 全文解析与分块：在上述状态链路上实现 TXT/Markdown/DOCX 统一解析适配器、动态上传白名单、LangChain 成熟递归切分和 PostgreSQL 租约执行器。完整正文与片段原子保存，支持并发领取、中断恢复、显式重试和迟到轮次隔离；成功停在等待向量化。新增两张实际业务表，知识库现为六张。21 项确定性、14 项真实 PostgreSQL，及三格式真实 HTTP/浏览器上传、DOCX 十万字符之后尾部、分页来源、失败重试/权限检查通过。未调用模型或 Qdrant，实验仓库没有对应分块实验，本轮通过产品功能覆盖。见 [迭代](iterations/knowledge-text-ingestion.md)。
+
+2026-10-27 嵌入接入：统一 EmbeddingClient，Ollama 与 OpenAI 兼容协议按 EMBEDDING_* 切换，记录模型/版本/维度/前缀配置标识，向量完整生成后原子暂存现有片段表，状态为等待索引写入。28 项本地测试、18 项真实 PostgreSQL（嵌入故障使用模拟）、类型/构建/db:status 通过；真实 D 盘 qwen3-embedding:0.6b 在 CPU 模式完成产品临时文档与查询的 1024 维嵌入。尚未调用 Qdrant、真实云端或业务系统；GPU 探测无响应原因未完全定位。见 [迭代](iterations/knowledge-ollama-embeddings.md)。
+
+2026-10-27 Qdrant 入库：已在原 worker 上接索引领取、稳定 ID upsert、wait=true 完成确认、具体点/来源/向量读回与 ready 回执。GET 只读状态，未知时 POST 独立核对，明确缺失后才重试；状态 UI 五步无计数。33 项本地、18 项 PostgreSQL、5 项真实 Qdrant、类型/构建及真实 HTTP/浏览器通过。两份桌面文档真实调用 Ollama 并写 30 个 1024 维 point，保留在两个入库验收知识库供查看；基础过滤检索已实查，但业务检索 API、Agent/云端/真实业务仍未集成。见 [迭代](iterations/knowledge-qdrant-indexing.md) 和 [查看指南](qdrant-data-viewing.md)。
 
 ## 记忆与持久化的概念边界
 

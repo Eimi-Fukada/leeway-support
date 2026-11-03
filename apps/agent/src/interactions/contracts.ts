@@ -1,14 +1,11 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // 此文件同时供服务端和 UI 使用；只有数据契约，不导入模型、数据库或凭据。
 const base = {
   key: z
     .string()
     .regex(/^[A-Za-z][A-Za-z0-9_]{0,39}$/)
-    .refine(
-      (value) => !Object.hasOwn(Object.prototype, value),
-      "问题标识不能使用保留名称",
-    ),
+    .refine((value) => !Object.hasOwn(Object.prototype, value), '问题标识不能使用保留名称'),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
 };
@@ -24,13 +21,13 @@ export const informationSpecSchema = z
     description: z.string().trim().min(1).max(500),
     fields: z
       .array(
-        z.discriminatedUnion("type", [
-          z.object({ ...base, type: z.literal("text") }).strict(),
-          z.object({ ...base, type: z.literal("textarea") }).strict(),
+        z.discriminatedUnion('type', [
+          z.object({ ...base, type: z.literal('text') }).strict(),
+          z.object({ ...base, type: z.literal('textarea') }).strict(),
           z
             .object({
               ...base,
-              type: z.literal("select"),
+              type: z.literal('select'),
               options: z.array(option).min(2).max(10),
             })
             .strict(),
@@ -41,24 +38,21 @@ export const informationSpecSchema = z
   })
   .strict()
   .superRefine((spec, ctx) => {
-    if (
-      new Set(spec.fields.map((field) => field.key)).size !== spec.fields.length
-    )
+    if (new Set(spec.fields.map((field) => field.key)).size !== spec.fields.length)
       ctx.addIssue({
-        code: "custom",
-        message: "问题标识不能重复",
-        path: ["fields"],
+        code: 'custom',
+        message: '问题标识不能重复',
+        path: ['fields'],
       });
     spec.fields.forEach((field, index) => {
       if (
-        field.type === "select" &&
-        new Set(field.options.map((entry) => entry.value)).size !==
-          field.options.length
+        field.type === 'select' &&
+        new Set(field.options.map((entry) => entry.value)).size !== field.options.length
       )
         ctx.addIssue({
-          code: "custom",
-          message: "选项值不能重复",
-          path: ["fields", index, "options"],
+          code: 'custom',
+          message: '选项值不能重复',
+          path: ['fields', index, 'options'],
         });
     });
   });
@@ -79,7 +73,7 @@ export const informationFormSchema = z
     schemaVersion: z.literal(1),
     formId: z.uuid(),
     formVersion: z.literal(1),
-    status: z.enum(["draft", "pending", "submitted", "invalidated"]),
+    status: z.enum(['draft', 'pending', 'submitted', 'invalidated']),
     expiresAt: z.iso.datetime(),
     interruptId: z.string().min(1).max(256).optional(),
     spec: informationSpecSchema,
@@ -87,23 +81,29 @@ export const informationFormSchema = z
   .strict();
 export type InformationForm = z.infer<typeof informationFormSchema>;
 
-export const informationInterruptSchema = z.object({
-  kind: z.literal("information"),
-  formId: z.uuid(),
-  runId: z.uuid(),
-}).strict();
+export const informationInterruptSchema = z
+  .object({
+    kind: z.literal('information'),
+    formId: z.uuid(),
+    runId: z.uuid(),
+  })
+  .strict();
 
 // 仅由服务端验证 submission 后生成，外部不能直接提交 Graph resume。
-export const informationReplySchema = z.object({
-  formId: z.uuid(), submissionId: z.uuid(), cancelled: z.boolean(),
-  answers: z.record(z.string(), z.string()),
-}).strict();
+export const informationReplySchema = z
+  .object({
+    formId: z.uuid(),
+    submissionId: z.uuid(),
+    cancelled: z.boolean(),
+    answers: z.record(z.string(), z.string()),
+  })
+  .strict();
 export type InformationReply = z.infer<typeof informationReplySchema>;
 
 export class InformationError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(`补充信息：${message}`, options);
-    this.name = "InformationError";
+    this.name = 'InformationError';
   }
 }
 
@@ -112,34 +112,22 @@ export function validateAnswers(
   spec: InformationSpec,
   answers: Record<string, string>,
 ): Record<string, string> {
-  if (
-    Object.keys(answers).some(
-      (key) => !spec.fields.some((field) => field.key === key),
-    )
-  )
-    throw new InformationError("包含未知问题，请刷新表单。");
+  if (Object.keys(answers).some((key) => !spec.fields.some((field) => field.key === key)))
+    throw new InformationError('包含未知问题，请刷新表单。');
   const result: Record<string, string> = {};
   for (const field of spec.fields) {
-    const value = (answers[field.key] ?? "").trim();
-    if (field.required && !value)
-      throw new InformationError(`请填写“${field.label}”。`);
-    if (
-      value.length >
-      (field.type === "textarea" ? 2000 : field.type === "text" ? 500 : 80)
-    )
+    const value = (answers[field.key] ?? '').trim();
+    if (field.required && !value) throw new InformationError(`请填写“${field.label}”。`);
+    if (value.length > (field.type === 'textarea' ? 2000 : field.type === 'text' ? 500 : 80))
       throw new InformationError(`“${field.label}”内容过长。`);
-    if (
-      value &&
-      field.type === "select" &&
-      !field.options.some((entry) => entry.value === value)
-    )
+    if (value && field.type === 'select' && !field.options.some((entry) => entry.value === value))
       throw new InformationError(`“${field.label}”选项无效。`);
     if (
       /(?:api[_ -]?key|password|密码|access[_ -]?token)\s*[:=：]\s*\S+|\bsk-[A-Za-z0-9_-]{16,}|\bBearer\s+\S+/i.test(
         value,
       )
     )
-      throw new InformationError("请删除答案中的密码、密钥或访问令牌。");
+      throw new InformationError('请删除答案中的密码、密钥或访问令牌。');
     result[field.key] = value;
   }
   return result;

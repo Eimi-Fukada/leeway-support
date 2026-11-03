@@ -19,6 +19,8 @@
     "agent:db:status": "pnpm --filter @leeway-support/agent db:status",
     "db:init": "pnpm agent:db:init && pnpm knowledge:db:init",
     "db:status": "pnpm -r --no-bail --workspace-concurrency=1 run db:status",
+    "format": "prettier --write \"**/*.{ts,tsx,mjs,json,css,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,mjs,json,css,yaml,yml}\"",
     "knowledge:test:postgres": "pnpm --filter @leeway-support/knowledge test:postgres",
     "knowledge:test:qdrant": "pnpm --filter @leeway-support/knowledge test:qdrant",
     "knowledge:test:http": "pnpm --filter @leeway-support/knowledge test:http",
@@ -29,6 +31,7 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "prettier": "3.6.2",
     "turbo": "2.11.10"
   }
 }

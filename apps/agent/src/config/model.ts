@@ -1,5 +1,5 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { loadAgentEnv } from "./env.ts";
+import { ChatOpenAI } from '@langchain/openai';
+import { loadAgentEnv } from './env.ts';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -10,29 +10,32 @@ function required(name: string): string {
 }
 
 // 静态 import 只加载定义；调用此函数时才读取配置、校验并创建真实模型。
-export function createModel(options?: { effort:"low"|"high"; webSearch:boolean }): ChatOpenAI {
+export function createModel(options?: { effort: 'low' | 'high'; webSearch: boolean }): ChatOpenAI {
   // 由同目录 env.ts 定位 apps/agent/.env，不依赖从哪个目录启动。
   // 部署时可以直接注入环境变量；Node 不会用文件覆盖已有变量。
   loadAgentEnv();
 
-  const apiKey = required("OPENAI_API_KEY");
-  const modelName = required("OPENAI_MODEL");
+  const apiKey = required('OPENAI_API_KEY');
+  const modelName = required('OPENAI_MODEL');
   const baseURL = process.env.OPENAI_BASE_URL?.trim() || undefined;
-  const apiMode = process.env.OPENAI_API_MODE?.trim() || "responses";
-  if(options&&apiMode!=="responses")throw new Error("知识问答的思考与联网能力需要 Responses API。");
+  const apiMode = process.env.OPENAI_API_MODE?.trim() || 'responses';
+  if (options && apiMode !== 'responses')
+    throw new Error('知识问答的思考与联网能力需要 Responses API。');
 
-  if (apiMode !== "responses" && apiMode !== "chat-completions") {
-    throw new Error("OPENAI_API_MODE 只能是 responses 或 chat-completions。");
+  if (apiMode !== 'responses' && apiMode !== 'chat-completions') {
+    throw new Error('OPENAI_API_MODE 只能是 responses 或 chat-completions。');
   }
 
   if (baseURL) {
     try {
       const url = new URL(baseURL);
-      if (!["https:", "http:"].includes(url.protocol)) throw new Error();
+      if (!['https:', 'http:'].includes(url.protocol)) throw new Error();
       if (url.username || url.password || url.search || url.hash) throw new Error();
       if (/\/(responses|chat\/completions)\/?$/.test(url.pathname)) throw new Error();
     } catch {
-      throw new Error("OPENAI_BASE_URL 应为 http/https API 基础地址，不能带凭证、查询参数或完整请求路径。");
+      throw new Error(
+        'OPENAI_BASE_URL 应为 http/https API 基础地址，不能带凭证、查询参数或完整请求路径。',
+      );
     }
   }
 
@@ -41,9 +44,9 @@ export function createModel(options?: { effort:"low"|"high"; webSearch:boolean }
     apiKey,
     model: modelName,
     configuration: { baseURL },
-    useResponsesApi: apiMode === "responses",
+    useResponsesApi: apiMode === 'responses',
     timeout: 60_000,
     maxRetries: 0, // SDK 不重试；主回答的有限重试由 Agent 中间件唯一管理，摘要仍不重试。
-    ...(options ? {reasoning:{effort:options.effort}} : {}),
+    ...(options ? { reasoning: { effort: options.effort } } : {}),
   });
 }

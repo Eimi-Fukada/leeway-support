@@ -1,9 +1,9 @@
-import { after } from "next/server";
-import { getSupportRuntime } from "../../../../src/server/runtime.ts";
-import { json, localRequestError } from "../../../../src/server/request.ts";
+import { after } from 'next/server';
+import { getSupportRuntime } from '../../../../src/server/runtime.ts';
+import { json, localRequestError } from '../../../../src/server/request.ts';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const maxDuration = 90;
 
 async function handle(request: Request) {
@@ -15,10 +15,12 @@ async function handle(request: Request) {
     after(() => support.flush());
     const response = await support.handle(request);
     const headers = new Headers(response.headers);
-    headers.set("Cache-Control", "no-store");
-    headers.set("X-Accel-Buffering", "no");
+    headers.set('Cache-Control', 'no-store');
+    headers.set('X-Accel-Buffering', 'no');
     return new Response(response.body, { status: response.status, headers });
-  } catch { return json({ error: "客服服务暂不可用，请核对服务配置。" }, 503); }
+  } catch {
+    return json({ error: '客服服务暂不可用，请核对服务配置。' }, 503);
+  }
 }
 
 export { handle as GET, handle as POST, handle as DELETE };

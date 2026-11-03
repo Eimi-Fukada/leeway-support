@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+build
+coverage
+public
+*.sql
+*.docx
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.lock
+pnpm-lock.yaml

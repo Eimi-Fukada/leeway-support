@@ -4,6 +4,8 @@
 
 2026-10-28/29 实施更新：[统一 Agent 执行方案](agent-knowledge-search-execution-plan.md) 的 S1–S6 已接通，S7 已执行本地功能、真实存储/HTTP/GPT 和浏览器验收，见 [记录](iterations/unified-agent-knowledge-web-reasoning.md)。联网与思考使用 GPT 原生能力；远端搜索硬预算仍为生产门槛，不将本地验收等同生产发布。
 
+2026-11-12 执行条目切片：[知识库问答执行条目与回答校正](iterations/knowledge-chat-execution-items.md) 已接版本化 `support.execution`、回答完成全文校正和公开文本过滤；活动条目暂不持久化，供应商联网搜索开始事件与断线恢复待补。
+
 更新：2026-10-25。状态：开发与学习约定，缺口清单待逐项实施。
 
 ## 两个仓库如何配合

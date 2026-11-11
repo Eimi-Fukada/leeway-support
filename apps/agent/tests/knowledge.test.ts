@@ -12,6 +12,7 @@ import {
   runOptionsSchema,
   currentCapabilities,
   collectProviderContent,
+  knowledgeTool,
   type RunDetails,
 } from '../src/knowledge/runtime.ts';
 import type { KnowledgeClient } from '../src/knowledge/client.ts';
@@ -33,6 +34,67 @@ test('选项默认值与请求幂等键包含实际执行选项', () => {
     requestHash('问题', undefined, { webSearch: true }),
   );
   assert.throws(() => runOptionsSchema.parse({ thinkingMode: 'fake' }));
+});
+test('知识检索工具发布可关联的执行条目并返回证据结果', async () => {
+  const events: { name: string; value: unknown }[] = [],
+    retrievalId = '11111111-1111-4111-8111-111111111111',
+    retrievalClient = {
+      scope: async () => 'revision',
+      search: async () => ({
+        retrievalId,
+        status: 'ok' as const,
+        scopeRevision: 'revision',
+        budgetLimited: false,
+        evidence: [
+          {
+            evidenceId: 'evidence-1',
+            documentId: '22222222-2222-4222-8222-222222222222',
+            documentName: '退款政策',
+            knowledgeBaseId: '33333333-3333-4333-8333-333333333333',
+            chunkId: '44444444-4444-4444-8444-444444444444',
+            text: '首次购买用户可在七天内申请退款。',
+            generationId: 'generation-1',
+            sourceSha256: 'source-1',
+            headingPath: ['退款政策'],
+          },
+        ],
+      }),
+    } as unknown as KnowledgeClient;
+  const output = await withCapabilities(
+    {
+      client: retrievalClient,
+      revision: 'revision',
+      details: details(),
+      emit: (event) => events.push(event),
+    },
+    () => knowledgeTool().invoke({ query: '首次购买可以退款吗？' }),
+  );
+  assert.equal(output.status, 'ok');
+  assert.equal(output.evidence[0]?.text, '首次购买用户可在七天内申请退款。');
+  const lifecycle = events
+    .filter((event) => event.name === 'support.execution')
+    .map((event) => event.value as { itemId: string; status: string });
+  assert.deepEqual(
+    lifecycle.map((event) => event.status),
+    ['running', 'completed'],
+  );
+  assert.equal(lifecycle[0]?.itemId, lifecycle[1]?.itemId);
+});
+test('带 reasoning 元数据的模型片段不会进入公开文本流', async () => {
+  const model = fakeModel().respond(
+      new AIMessage({
+        content: [{ type: 'reasoning', text: '私有思考内容' }],
+      }),
+    ),
+    events: { type: 'text'; text: string }[] = [],
+    agent = createSupportAgent(model);
+  await assert.rejects(
+    runSupportAgent(agent, '问题', (event) => {
+      if (event.type === 'text') events.push({ type: 'text', text: event.text });
+    }),
+    /模型未返回有效文本回答/,
+  );
+  assert.deepEqual(events, []);
 });
 test('服务签名绑定 audience、路径、原始正文、时间与一次性 nonce', async () => {
   const seen = new Set<string>();

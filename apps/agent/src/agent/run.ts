@@ -22,6 +22,33 @@ export type SupportRunEvent =
   | { type: 'text'; text: string; node: string }
   | { type: 'node-update'; node: string };
 
+function isPublicModelText(
+  message: { additional_kwargs?: Record<string, unknown>; content?: unknown },
+  metadata: Record<string, unknown>,
+) {
+  // Providers may expose reasoning summaries or private thinking metadata beside visible text.
+  // Only forward content that the model adapter identifies as ordinary user-facing text.
+  const additional = message.additional_kwargs;
+  if (additional && typeof additional === 'object' && 'reasoning' in additional) return false;
+  if (
+    Array.isArray(message.content) &&
+    message.content.length > 0 &&
+    message.content.every(
+      (block) =>
+        !!block &&
+        typeof block === 'object' &&
+        'type' in block &&
+        (block.type === 'reasoning' || block.type === 'thinking'),
+    )
+  )
+    return false;
+  const tags = metadata.tags;
+  return !(
+    Array.isArray(tags) &&
+    tags.some((tag) => typeof tag === 'string' && /reasoning|thinking/i.test(tag))
+  );
+}
+
 export async function runSupportAgent(
   agent: ReturnType<typeof createSupportAgent>,
   question: string,
@@ -155,7 +182,8 @@ export async function runSupportAgent(
             if (
               message.type !== 'ai' ||
               metadata.lc_source === 'summarization' ||
-              metadata.tags?.includes('nostream')
+              metadata.tags?.includes('nostream') ||
+              !isPublicModelText(message, metadata)
             )
               continue;
             if (message.text)

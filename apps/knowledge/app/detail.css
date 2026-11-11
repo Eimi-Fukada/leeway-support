@@ -843,6 +843,49 @@
   overflow: auto;
   padding: 20px;
 }
+.qa-execution {
+  flex-shrink: 0;
+  margin: 0 20px 4px;
+  padding: 10px 13px;
+  border: 1px solid #e2ebe4;
+  border-radius: 12px;
+  background: #f5f9f5;
+  color: #536b5a;
+  font-size: 11px;
+}
+.qa-execution-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 22px;
+}
+.qa-execution-mark {
+  width: 14px;
+  color: #6c9a78;
+  font-weight: 650;
+  text-align: center;
+}
+.qa-execution-item.running .qa-execution-mark,
+.qa-execution-item.waiting .qa-execution-mark {
+  color: #8a9d62;
+  animation: qa-execution-pulse 1.2s ease-in-out infinite;
+}
+.qa-execution-item.failed .qa-execution-mark {
+  color: #b15a4c;
+}
+.qa-execution-title {
+  color: #365c45;
+  font-weight: 550;
+}
+.qa-execution-summary {
+  color: #7a8b7e;
+  overflow-wrap: anywhere;
+}
+@keyframes qa-execution-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
 .knowledge-message {
   margin: 0 0 18px;
   padding: 14px;

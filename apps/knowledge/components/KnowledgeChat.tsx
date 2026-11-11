@@ -14,6 +14,16 @@ interface Message {
   content: string;
   citations?: Citation[];
 }
+interface ExecutionItem {
+  version: 1;
+  itemId: string;
+  kind: 'model' | 'retrieval' | 'web_search' | 'information' | 'answer';
+  status: 'running' | 'completed' | 'waiting' | 'failed';
+  title: string;
+  summary?: string;
+  startedAt?: number;
+  completedAt?: number;
+}
 function answerContent(message: Message) {
   return message.content
     .split(/(\[K:[^\]]+\]|\*\*[^*]+\*\*|\[[^\[\]]+\]\(https?:\/\/[^\s)]+\))/g)
@@ -58,6 +68,7 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
   const [thread, setThread] = useState(''),
     [draft, setDraft] = useState(''),
     [messages, setMessages] = useState<Message[]>([]),
+    [executionItems, setExecutionItems] = useState<ExecutionItem[]>([]),
     [status, setStatus] = useState('loading'),
     [notice, setNotice] = useState(''),
     [web, setWeb] = useState(false),
@@ -84,6 +95,7 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
         if (message) message.citations = row.result?.details?.citations ?? [];
       }
       setMessages(items);
+      setExecutionItems([]);
       setStatus(data.snapshot.status);
       setForm(data.snapshot.information);
       setNotice(data.snapshot.notice ?? '');
@@ -112,6 +124,7 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
     localStorage.setItem(`knowledge-chat:${baseId}`, id);
     setThread(id);
     setMessages([]);
+    setExecutionItems([]);
     setForm(undefined);
     setStatus('empty');
     setNotice('');
@@ -141,6 +154,7 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
     setDraft('');
     setStatus('running');
     setNotice('');
+    setExecutionItems([]);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -182,6 +196,25 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
                   m.id === event.messageId ? { ...m, content: m.content + event.delta } : m,
                 ),
               );
+            if (event.type === 'CUSTOM' && event.name === 'support.execution') {
+              const item = event.value as ExecutionItem;
+              if (item.version !== 1 || !item.itemId || !item.title) continue;
+              setExecutionItems((previous) => {
+                const index = previous.findIndex((entry) => entry.itemId === item.itemId);
+                if (index < 0) return [...previous, item];
+                const next = [...previous];
+                next[index] = { ...next[index], ...item };
+                return next;
+              });
+              setNotice(item.summary ?? item.title);
+            }
+            if (event.type === 'CUSTOM' && event.name === 'support.message.completed') {
+              setMessages((previous) =>
+                previous.map((m) =>
+                  m.id === event.value.messageId ? { ...m, content: event.value.content } : m,
+                ),
+              );
+            }
             if (event.type === 'RUN_ERROR') throw new Error(event.message);
             if (event.type === 'CUSTOM' && event.name === 'support.retrieval')
               setNotice(event.value.status === 'started' ? '正在查询知识库…' : '已完成知识检索。');
@@ -263,6 +296,19 @@ export function KnowledgeChat({ baseId, name }: { baseId: string; name: string }
           </article>
         ))}
       </div>
+      {!!executionItems.length && (
+        <div className="qa-execution" aria-live="polite" aria-label="执行过程">
+          {executionItems.map((item) => (
+            <div className={`qa-execution-item ${item.status}`} key={item.itemId}>
+              <span className="qa-execution-mark" aria-hidden="true">
+                {item.status === 'completed' ? '✓' : item.status === 'failed' ? '!' : '·'}
+              </span>
+              <span className="qa-execution-title">{item.title}</span>
+              {item.summary && <span className="qa-execution-summary">{item.summary}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {form && (
         <form
           className="knowledge-information"

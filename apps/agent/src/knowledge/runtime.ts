@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AIMessage, SystemMessage, createMiddleware, tool } from 'langchain';
 import { createModel } from '../config/model.ts';
@@ -26,6 +26,22 @@ export interface RunDetails {
   searchCalls: number;
   model: string;
   providerResponses?: { id: string; usage: unknown; searchCalls: number }[];
+}
+export type ExecutionItemKind = 'model' | 'retrieval' | 'web_search' | 'information' | 'answer';
+export type ExecutionItemStatus = 'running' | 'completed' | 'waiting' | 'failed';
+export const executionItemSchema = z.object({
+  version: z.literal(1),
+  itemId: z.string().min(1).max(200),
+  kind: z.enum(['model', 'retrieval', 'web_search', 'information', 'answer']),
+  status: z.enum(['running', 'completed', 'waiting', 'failed']),
+  title: z.string().min(1).max(100),
+  summary: z.string().max(500).optional(),
+  startedAt: z.number().int().nonnegative().optional(),
+  completedAt: z.number().int().nonnegative().optional(),
+});
+export type ExecutionItem = z.infer<typeof executionItemSchema>;
+export function executionEvent(value: Omit<ExecutionItem, 'version'>) {
+  return { name: 'support.execution', value: executionItemSchema.parse({ version: 1, ...value }) };
 }
 export const runDetailsSchema = z.object({
   options: runOptionsSchema,
@@ -101,8 +117,51 @@ export function knowledgeTool() {
     async ({ query }) => {
       const current = storage.getStore();
       if (!current) throw new Error('当前入口没有知识授权。');
+      const itemId = `retrieval-${randomUUID()}`;
+      const startedAt = Date.now();
+      current.emit?.(
+        executionEvent({
+          itemId,
+          kind: 'retrieval',
+          status: 'running',
+          title: '正在查询知识库',
+          startedAt,
+        }),
+      );
       current.emit?.({ name: 'support.retrieval', value: { status: 'started' } });
-      const response = await current.client.search(query, current.revision);
+      let response;
+      try {
+        response = await current.client.search(query, current.revision);
+      } catch (error) {
+        current.emit?.(
+          executionEvent({
+            itemId,
+            kind: 'retrieval',
+            status: 'failed',
+            title: '知识库查询失败',
+            summary: '检索服务未完成请求，请核对会话状态。',
+            startedAt,
+            completedAt: Date.now(),
+          }),
+        );
+        throw error;
+      }
+      current.emit?.(
+        executionEvent({
+          itemId,
+          kind: 'retrieval',
+          status: 'completed',
+          title: '已完成知识检索',
+          summary:
+            response.status === 'ok'
+              ? `返回 ${response.evidence.length} 条证据`
+              : response.status === 'no_match'
+                ? '没有找到匹配资料'
+                : '当前没有可检索文档',
+          startedAt,
+          completedAt: Date.now(),
+        }),
+      );
       current.emit?.({
         name: 'support.retrieval',
         value: { status: 'completed', retrievalId: response.retrievalId },
@@ -184,6 +243,17 @@ export function capabilitiesMiddleware() {
             name: 'support.web_search',
             value: { status: 'completed', calls: searches },
           });
+        if (searches)
+          current.emit?.(
+            executionEvent({
+              itemId: `web-search-${randomUUID()}`,
+              kind: 'web_search',
+              status: 'completed',
+              title: '已完成联网搜索',
+              summary: `完成 ${searches} 次搜索`,
+              completedAt: Date.now(),
+            }),
+          );
         (current.details.providerResponses ??= []).push({
           id: String(message.response_metadata?.id ?? message.id ?? ''),
           usage: message.usage_metadata,

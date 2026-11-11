@@ -197,12 +197,30 @@ export async function POST(request: Request) {
             emit({ type: 'RUN_STARTED', threadId: value.threadId, runId });
             emit({ type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' });
             let streamed = false;
+            let answerStarted = false;
+            const startAnswer = () => {
+              if (answerStarted) return;
+              answerStarted = true;
+              emit({
+                type: 'CUSTOM',
+                name: 'support.execution',
+                value: {
+                  version: 1,
+                  itemId: messageId,
+                  kind: 'answer',
+                  status: 'running',
+                  title: '正在生成回答',
+                  startedAt: Date.now(),
+                },
+              });
+            };
             try {
               const result = await runSupportAgent(
                 services.agent,
                 value.message!,
                 (event) => {
                   if (event.type === 'text') {
+                    startAnswer();
                     streamed = true;
                     emit({ type: 'TEXT_MESSAGE_CONTENT', messageId, delta: event.text });
                   }
@@ -217,12 +235,59 @@ export async function POST(request: Request) {
                   submission: value.submission,
                 },
               );
-              if (!streamed && result.answer)
+              if (!streamed && result.answer) {
+                startAnswer();
                 emit({ type: 'TEXT_MESSAGE_CONTENT', messageId, delta: result.answer });
+              }
+              emit({
+                type: 'CUSTOM',
+                name: 'support.execution',
+                value:
+                  result.status === 'waiting_for_input'
+                    ? {
+                        version: 1,
+                        itemId: messageId,
+                        kind: 'answer',
+                        status: 'waiting',
+                        title: '等待补充资料',
+                        summary: result.information?.spec.title,
+                        completedAt: Date.now(),
+                      }
+                    : {
+                        version: 1,
+                        itemId: messageId,
+                        kind: 'answer',
+                        status: 'completed',
+                        title: '已完成回答',
+                        summary: result.details?.citations.length
+                          ? `已核对 ${result.details.citations.length} 个来源`
+                          : undefined,
+                        completedAt: Date.now(),
+                      },
+              });
+              if (result.status === 'completed')
+                emit({
+                  type: 'CUSTOM',
+                  name: 'support.message.completed',
+                  value: { messageId, phase: 'final_answer', content: result.answer },
+                });
               emit({ type: 'TEXT_MESSAGE_END', messageId });
               emit({ type: 'CUSTOM', name: 'support.result', value: result });
               emit({ type: 'RUN_FINISHED', threadId: value.threadId, runId });
             } catch {
+              emit({
+                type: 'CUSTOM',
+                name: 'support.execution',
+                value: {
+                  version: 1,
+                  itemId: messageId,
+                  kind: 'answer',
+                  status: 'failed',
+                  title: '回答未完成',
+                  summary: '请核对会话状态。',
+                  completedAt: Date.now(),
+                },
+              });
               emit({
                 type: 'RUN_ERROR',
                 code: 'RUN_FAILED',
